@@ -5,22 +5,23 @@ LLM으로 로컬 파일을 제어하는 개인 에이전트 하네스 (MVP).
 
 **인증**: OpenAI(ChatGPT 구독) OAuth — Codex CLI의 "Sign in with ChatGPT" 플로우를 재사용 (개인용).
 
-## 빠른 시작
+## 설치
 
 ```bash
-pip install -r requirements.txt
-python3 -m agent.main --login                    # 브라우저 로그인 (최초 1회)
-python3 -m agent.main "이 파일 요약해줘: ./notes.txt"
+pip install -e .        # dasan 명령 설치
+dasan login             # 브라우저 로그인 (최초 1회)
 ```
+
+`dasan: command not found` 이면 pip 스크립트 폴더가 PATH에 없는 것. `python -m agent.main <인자>` 로도 동일하게 동작한다.
 
 ## 사용
 
 ```bash
-python3 -m agent.main                    # 채팅 TUI (CC 스타일, 스트리밍) — 종료: /exit
-python3 -m agent.main "질문..."          # 단발 질문 (스크립트용)
-python3 -m agent.main --list             # 세션 목록
-python3 -m agent.main --session <id>     # 세션 이어가기
-AGENT_DEBUG=1 python3 -m agent.main ...  # 디버그 (원본 스트림 /tmp/dasan_raw.txt)
+dasan                          # 채팅 TUI (CC 스타일, 스트리밍) — 종료: /exit
+dasan start --session <id>     # 세션 이어가기
+dasan ask "이 파일 요약해줘: ./notes.txt"   # 단발 질문 (스크립트용)
+dasan list                     # 세션 목록
+AGENT_DEBUG=1 dasan ask "..."  # 디버그 (원본 스트림 /tmp/dasan_raw.txt)
 ```
 
 TUI 안 명령: `/new` `/sessions` `/clear` `/help` `/exit`

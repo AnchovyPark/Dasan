@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dasan"
+version = "0.1.0"
+description = "개인 에이전트 하네스 (LLM으로 로컬 파일 제어)"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2",
+    "python-dotenv>=1",
+    "rich>=13",
+    "prompt_toolkit>=3",
+]
+
+[project.scripts]
+dasan = "agent.main:main"
+
+[tool.setuptools.packages.find]
+include = ["agent*"]
