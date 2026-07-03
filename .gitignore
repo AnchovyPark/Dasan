@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# 환경/설정 (실제 .env 는 절대 커밋 금지; .env.example 만 공유)
+.env
+
+# 세션 DB (대화 기록)
+*.db
+
+# 인증/토큰 — 혹시 리포 안에 생겨도 차단 (defense-in-depth)
+auth.json
+**/auth.json
+.dasan/
+*token*.json
+
+# 가상환경
+.venv/
+venv/
+
+# OS/기타
+.DS_Store
+*.log
