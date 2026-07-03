@@ -8,11 +8,11 @@ LLM으로 로컬 파일을 제어하는 개인 에이전트 하네스 (MVP).
 ## 설치
 
 ```bash
-pip install -e .        # dasan 명령 설치
+./install.sh            # 패키지 설치 + dasan 명령 전역 연결
 dasan login             # 브라우저 로그인 (최초 1회)
 ```
 
-`dasan: command not found` 이면 pip 스크립트 폴더가 PATH에 없는 것. `python -m agent.main <인자>` 로도 동일하게 동작한다.
+`install.sh`는 `pip install -e .` 후 `dasan`이 PATH에 없으면 `/usr/local/bin` 등에 심링크를 걸어준다. 자동 연결이 안 되면 스크립트가 PATH 설정법을 안내한다. `python -m agent.main <인자>` 로도 동일하게 동작한다.
 
 ## 사용
 
