@@ -21,3 +21,8 @@ venv/
 # OS/기타
 .DS_Store
 *.log
+
+# 패키징 빌드 부산물
+*.egg-info/
+build/
+dist/
