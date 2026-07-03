@@ -42,7 +42,13 @@ class OpenAIOAuthAdapter:
         self._base_url = base_url.rstrip("/")
         self._session_id = str(uuid.uuid4())
 
-    def call(self, messages: list[dict], tools: list[dict], system: str | None = None) -> ModelResponse:
+    def call(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        system: str | None = None,
+        on_delta=None,
+    ) -> ModelResponse:
         body: dict = {
             "model": self._model,
             "input": messages,
@@ -52,11 +58,11 @@ class OpenAIOAuthAdapter:
         }
         if system:
             body["instructions"] = system
-        return self._normalize(self._request(body))
+        return self._normalize(self._request(body, on_delta=on_delta))
 
     # --- HTTP (스트리밍 + 401 재시도) ---
 
-    def _request(self, body: dict, _retried: bool = False) -> dict:
+    def _request(self, body: dict, _retried: bool = False, on_delta=None) -> dict:
         headers = {
             "Authorization": f"Bearer {self._store.access_token()}",
             "Content-Type": "application/json",
@@ -83,7 +89,7 @@ class OpenAIOAuthAdapter:
         with httpx.stream("POST", url, headers=headers, json=body, timeout=300) as r:
             if r.status_code == 401 and not _retried:
                 self._store.force_refresh()
-                return self._request(body, _retried=True)
+                return self._request(body, _retried=True, on_delta=on_delta)
             if r.status_code >= 400:
                 r.read()  # 스트리밍 응답의 본문을 읽어 에러 메시지에 담는다
                 raise RuntimeError(f"백엔드 {r.status_code}: {r.text}")
@@ -104,6 +110,8 @@ class OpenAIOAuthAdapter:
                     seen_types.append(etype)
                 if etype in ("response.failed", "error"):
                     raise RuntimeError(f"모델 오류 이벤트: {event}")
+                if etype == "response.output_text.delta" and on_delta:
+                    on_delta(event.get("delta") or "")
                 if etype == "response.output_item.done" and event.get("item"):
                     output_items.append(event["item"])
                 elif etype in ("response.completed", "response.done") and "response" in event:
