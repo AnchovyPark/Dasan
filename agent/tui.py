@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import os
 import sys
 
 from prompt_toolkit import PromptSession
@@ -13,6 +14,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from .service import AgentService
+from .ui_labels import doing, done
 
 HELP = """[bold]명령[/bold]
   /new        새 세션 시작
@@ -80,19 +82,32 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
             continue
 
         # 이벤트/스트리밍 콜백
+        debug = bool(os.environ.get("AGENT_DEBUG"))
         state = {"started": False}
 
         def on_event(kind: str, **kw) -> None:
             if kind == "tool_call":
-                console.print(f"[dim]● {kw['name']}({kw['input']})[/dim]")
+                if debug:
+                    console.print(f"[dim]● {kw['name']}({kw['input']})[/dim]")
+                else:
+                    console.print(f"[dim]· {doing(kw['name'], kw['input'])}[/dim]")
             elif kind == "tool_result":
-                tag = "[red]오류[/red]" if kw["is_error"] else ""
-                preview = kw["output"].replace("\n", " ")[:100]
-                console.print(f"[dim]  ↳ {tag}{preview}[/dim]")
+                if debug:
+                    tag = "[red]오류[/red] " if kw["is_error"] else ""
+                    preview = kw["output"].replace("\n", " ")[:100]
+                    console.print(f"[dim]  ↳ {tag}{preview}[/dim]")
+                elif kw["is_error"]:
+                    # 실패는 감추지 않고 실제 오류를 보여준다
+                    preview = kw["output"].replace("\n", " ")[:120]
+                    console.print(f"[red]  ↳ 문제가 생겼어요: {preview}[/red]")
+                else:
+                    console.print(f"[dim]  ↳ {done(kw['name'], False)}[/dim]")
             elif kind == "refusal":
                 console.print("[yellow]모델이 응답을 거부했습니다[/yellow]")
             elif kind == "max_steps":
                 console.print("[yellow]최대 단계 수 도달[/yellow]")
+            elif kind == "truncated":
+                console.print("[yellow]응답이 잘렸습니다(max_tokens)[/yellow]")
 
         def on_delta(token: str) -> None:
             if not state["started"]:
@@ -100,6 +115,9 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
                 state["started"] = True
             sys.stdout.write(token)
             sys.stdout.flush()
+
+        # 제출 직후 즉시 신호를 줘서 '멍하니 기다리는' 공백을 없앤다
+        console.print("[dim]· 생각 중…[/dim]")
 
         try:
             answer = service.respond(sid, text, on_event=on_event, on_delta=on_delta)

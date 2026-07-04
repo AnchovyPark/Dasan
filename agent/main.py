@@ -12,25 +12,40 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from .auth.store import TokenStore
 from .config import load_config
 from .service import AgentService
+from .ui_labels import doing, done
 
 
 def make_event_printer():
+    debug = bool(os.environ.get("AGENT_DEBUG"))
+
     def on_event(kind: str, **kw) -> None:
         if kind == "tool_call":
-            print(f"  [도구 호출] {kw['name']}({kw['input']})")
+            if debug:
+                print(f"  [도구 호출] {kw['name']}({kw['input']})")
+            else:
+                print(f"  · {doing(kw['name'], kw['input'])}")
         elif kind == "tool_result":
-            tag = "오류" if kw["is_error"] else "결과"
-            preview = kw["output"].replace("\n", " ")[:120]
-            print(f"  [도구 {tag}] {preview}")
+            if debug:
+                tag = "오류" if kw["is_error"] else "결과"
+                preview = kw["output"].replace("\n", " ")[:120]
+                print(f"  [도구 {tag}] {preview}")
+            elif kw["is_error"]:
+                preview = kw["output"].replace("\n", " ")[:120]
+                print(f"  ↳ 문제가 생겼어요: {preview}")
+            else:
+                print(f"  ↳ {done(kw['name'], False)}")
         elif kind == "refusal":
             print("  [모델이 응답을 거부했습니다]")
         elif kind == "max_steps":
             print("  [최대 단계 수에 도달했습니다]")
+        elif kind == "truncated":
+            print("  [응답이 잘렸습니다(max_tokens)]")
 
     return on_event
 
