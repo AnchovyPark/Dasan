@@ -24,6 +24,7 @@ class Config:
     model: str
     db_path: str
     alignment_path: str  # 사용자 지속 선호(ALIGNMENT) 저장 파일
+    reasoning_effort: str  # gpt-5.x 추론 강도: minimal/low/medium/high, 또는 off
 
 
 def load_config() -> Config:
@@ -33,4 +34,5 @@ def load_config() -> Config:
         model=os.environ.get("AGENT_MODEL", "gpt-5.5"),
         db_path=os.environ.get("AGENT_DB_PATH", "~/.dasan/sessions.db"),
         alignment_path=os.environ.get("AGENT_ALIGNMENT_PATH", "~/.dasan/alignment.md"),
+        reasoning_effort=os.environ.get("AGENT_REASONING", "high"),
     )

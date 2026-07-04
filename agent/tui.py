@@ -27,7 +27,7 @@ def _print_header(console: Console, cfg, sid: str, resumed: int | None) -> None:
     console.print(
         Panel(
             f"[bold]Dasan[/bold]  ·  모델 [cyan]{cfg.model}[/cyan]  ·  세션 [dim]{sid}[/dim]  ·  {sub}\n"
-            "[dim]/help 로 명령 · 파일 관련 질문이면 read_file 로 읽고 답합니다[/dim]",
+            "[dim]/help 로 명령 · list_dir·search·read_file·write_file 도구로 프로젝트를 직접 다룹니다[/dim]",
             border_style="cyan",
         )
     )

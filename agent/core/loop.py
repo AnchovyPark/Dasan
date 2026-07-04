@@ -18,7 +18,7 @@ class AgentLoop:
         adapter: Any,
         registry: ToolRegistry,
         exposed_tools: list[str],
-        max_steps: int = 10,
+        max_steps: int = 20,
     ) -> None:
         self._adapter = adapter
         self._registry = registry

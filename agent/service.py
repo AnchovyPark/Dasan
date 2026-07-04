@@ -13,9 +13,12 @@ from .core.loop import AgentLoop
 from .prompt import compose_system
 from .providers.openai_oauth_adapter import OpenAIOAuthAdapter
 from .session.store import SessionStore
+from .tools.list_dir import list_dir_tool
 from .tools.read_file import read_file_tool
 from .tools.registry import ToolRegistry
 from .tools.remember import make_remember_tool
+from .tools.search import search_tool
+from .tools.write_file import write_file_tool
 
 # 세션 개념을 두지 않고 하나의 에이전트가 계속 이어가는 단일 세션 id.
 MAIN_SESSION = "main"
@@ -27,13 +30,18 @@ class AgentService:
         from .auth.store import TokenStore
 
         self._token_store = TokenStore(cfg.auth_path)
-        self._adapter = OpenAIOAuthAdapter(self._token_store, cfg.model, cfg.base_url)
+        self._adapter = OpenAIOAuthAdapter(
+            self._token_store, cfg.model, cfg.base_url, cfg.reasoning_effort
+        )
         self._alignment = AlignmentStore(cfg.alignment_path)
 
         self._registry = ToolRegistry()
         self._registry.register(read_file_tool)
+        self._registry.register(list_dir_tool)
+        self._registry.register(search_tool)
+        self._registry.register(write_file_tool)
         self._registry.register(make_remember_tool(self._alignment))
-        exposed = ["read_file", "remember_preference"]
+        exposed = ["read_file", "list_dir", "search", "write_file", "remember_preference"]
 
         self._loop = AgentLoop(self._adapter, self._registry, exposed_tools=exposed)
         self._sessions = SessionStore(cfg.db_path)

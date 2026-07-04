@@ -36,11 +36,19 @@ class ModelResponse:
 
 
 class OpenAIOAuthAdapter:
-    def __init__(self, store: TokenStore, model: str, base_url: str) -> None:
+    def __init__(
+        self,
+        store: TokenStore,
+        model: str,
+        base_url: str,
+        reasoning_effort: str = "high",
+    ) -> None:
         self._store = store
         self._model = model
         self._base_url = base_url.rstrip("/")
         self._session_id = str(uuid.uuid4())
+        # gpt-5.x는 추론 강도를 조절할 수 있다. off/none/""이면 아예 안 보낸다.
+        self._reasoning = (reasoning_effort or "").strip().lower()
 
     def call(
         self,
@@ -58,6 +66,8 @@ class OpenAIOAuthAdapter:
         }
         if system:
             body["instructions"] = system
+        if self._reasoning and self._reasoning not in ("off", "none"):
+            body["reasoning"] = {"effort": self._reasoning}
         return self._normalize(self._request(body, on_delta=on_delta))
 
     # --- HTTP (스트리밍 + 401 재시도) ---

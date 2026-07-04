@@ -1,7 +1,8 @@
 # Dasan
 
-LLM으로 로컬 파일을 제어하는 개인 에이전트 하네스 (MVP).
-"질문 → `read_file` 도구로 파일 읽기 → 답변" ReAct 루프를 끝까지 돌리고, 대화를 SQLite에 저장한다.
+LLM으로 로컬 파일을 제어하는 개인 에이전트 하네스.
+"질문 → 도구(list_dir·search·read_file·write_file)로 프로젝트 탐색·수정 → 답변" ReAct 루프를 끝까지 돌리고,
+대화는 단일 세션으로 SQLite(`~/.dasan/sessions.db`)에 계속 이어진다. 시스템 프롬프트는 불변 역할(CORE)과 학습되는 사용자 정렬(ALIGNMENT) 2겹.
 
 **인증**: OpenAI(ChatGPT 구독) OAuth — Codex CLI의 "Sign in with ChatGPT" 플로우를 재사용 (개인용).
 
@@ -47,7 +48,9 @@ agent/
 ├─ auth/          # OAuth PKCE 플로우 + 토큰 저장/자동 갱신
 ├─ providers/     # 모델 호출 어댑터 (openai_oauth / anthropic)
 ├─ core/loop.py   # ReAct 루프 (추론 → 도구 → 관찰)
-├─ tools/         # 도구 등록 + read_file
+├─ prompt.py      # 시스템 프롬프트 CORE(불변)+ALIGNMENT(가변) 조립
+├─ alignment.py   # 사용자 지속 선호 저장(~/.dasan/alignment.md)
+├─ tools/         # read_file · list_dir · search · write_file · remember_preference
 ├─ session/       # SQLite 세션 저장
 ├─ service.py     # AgentService — 프론트엔드 무관 코어 (respond)
 ├─ tui.py         # CC 스타일 채팅 TUI (스트리밍)
@@ -62,6 +65,7 @@ agent/
 | 변수 | 기본값 |
 |---|---|
 | `AGENT_MODEL` | `gpt-5.5` |
+| `AGENT_REASONING` | `high` (minimal/low/medium/high, 또는 `off`) |
 | `AGENT_DB_PATH` | `~/.dasan/sessions.db` |
 | `AGENT_AUTH_PATH` | `~/.dasan/auth.json` |
 | `AGENT_ALIGNMENT_PATH` | `~/.dasan/alignment.md` |
