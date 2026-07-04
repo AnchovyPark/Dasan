@@ -61,6 +61,9 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("init", help="초기 설정(말투·길이·역할) 진행/변경")
     sub.add_parser("list", help="세션 목록 출력")
 
+    p_ws = sub.add_parser("workspace", help="작업 폴더(수정·실행 허용 범위) 보기/변경")
+    p_ws.add_argument("path", nargs="?", help="설정할 폴더 (없으면 현재 표시)")
+
     p_ask = sub.add_parser("ask", help="단발 질문 (스크립트용)")
     p_ask.add_argument("question", nargs="+", help="질문")
     p_ask.add_argument("--session", help="이어서 진행할 세션 id")
@@ -91,6 +94,19 @@ def main(argv: list[str] | None = None) -> None:
     if command == "list":
         for sid, created in service.list_sessions():
             print(f"{sid}\t{created}")
+        service.close()
+        return
+
+    if command == "workspace":
+        path = getattr(args, "path", None)
+        if path:
+            try:
+                print(f"작업 폴더 설정: {service.set_workspace(path)}")
+            except Exception as e:
+                print(f"[실패] {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            print(f"현재 작업 폴더: {service.workspace_root()}")
         service.close()
         return
 

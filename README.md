@@ -1,7 +1,7 @@
 # Dasan
 
 LLM으로 로컬 파일을 제어하는 개인 에이전트 하네스.
-"질문 → 도구(list_dir·search·read_file·write_file)로 프로젝트 탐색·수정 → 답변" ReAct 루프를 끝까지 돌리고,
+"질문 → 도구(탐색·읽기·수정·명령 실행)로 프로젝트 작업 → 답변" ReAct 루프를 끝까지 돌리고,
 대화는 단일 세션으로 SQLite(`~/.dasan/sessions.db`)에 계속 이어진다. 시스템 프롬프트는 불변 역할(CORE)과 학습되는 사용자 정렬(ALIGNMENT) 2겹.
 
 **인증**: OpenAI(ChatGPT 구독) OAuth — Codex CLI의 "Sign in with ChatGPT" 플로우를 재사용 (개인용).
@@ -39,7 +39,19 @@ dasan list                     # 세션 목록
 AGENT_DEBUG=1 dasan ask "..."  # 디버그 (원본 스트림 /tmp/dasan_raw.txt)
 ```
 
-TUI 안 명령: `/new` `/sessions` `/clear` `/help` `/exit`
+TUI 안 명령: `/init` `/workspace [경로]` `/new` `/sessions` `/clear` `/help` `/exit`
+
+### 가드레일 (작업 폴더)
+
+파일 **변경(write/edit/delete/move)과 명령 실행(run_command)** 은 지정된 **작업 폴더(workspace)** 안에서만 가능하다(읽기·검색은 제한 없음). `rm -rf` 같은 극도로 위험한 명령은 실행 전 사용자 승인을 받는다.
+
+```bash
+dasan workspace                 # 현재 작업 폴더 보기
+dasan workspace ./my-project    # 작업 폴더 변경(저장됨) — 여러 프로젝트 전환
+# TUI 안에서는 /workspace ./other 로 실시간 전환
+```
+
+작업 폴더는 `AGENT_WORKSPACE`(env, 우선) > 저장된 포인터(`~/.dasan/workspace`) > 실행한 폴더(cwd) 순으로 정해진다.
 
 ## 구조
 
@@ -50,7 +62,8 @@ agent/
 ├─ core/loop.py   # ReAct 루프 (추론 → 도구 → 관찰)
 ├─ prompt.py      # 시스템 프롬프트 CORE(불변)+ALIGNMENT(가변) 조립
 ├─ alignment.py   # 사용자 지속 선호 저장(~/.dasan/alignment.md)
-├─ tools/         # read_file · list_dir · search · write_file · remember_preference
+├─ workspace.py   # 변경·실행을 허용 폴더로 가두는 가드레일
+├─ tools/         # read_file·list_dir·search / write_file·edit_file·delete_file·move_file·run_command / remember_preference
 ├─ session/       # SQLite 세션 저장
 ├─ service.py     # AgentService — 프론트엔드 무관 코어 (respond)
 ├─ tui.py         # CC 스타일 채팅 TUI (스트리밍)
@@ -69,6 +82,7 @@ agent/
 | `AGENT_DB_PATH` | `~/.dasan/sessions.db` |
 | `AGENT_AUTH_PATH` | `~/.dasan/auth.json` |
 | `AGENT_ALIGNMENT_PATH` | `~/.dasan/alignment.md` |
+| `AGENT_WORKSPACE` | (미설정 시 저장된 포인터 또는 cwd) |
 | `AGENT_BASE_URL` | `https://chatgpt.com/backend-api/codex` |
 
 ## 주의

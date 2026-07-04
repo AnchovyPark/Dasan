@@ -5,6 +5,7 @@ CLI·TUI·Discord·웹 등 어떤 표면이든 이 respond() 하나만 호출하
 """
 from __future__ import annotations
 
+import os
 from typing import Callable
 
 from .alignment import AlignmentStore
@@ -13,12 +14,17 @@ from .core.loop import AgentLoop
 from .prompt import compose_system
 from .providers.openai_oauth_adapter import OpenAIOAuthAdapter
 from .session.store import SessionStore
-from .tools.list_dir import list_dir_tool
-from .tools.read_file import read_file_tool
+from .tools.delete_file import make_delete_file_tool
+from .tools.edit_file import make_edit_file_tool
+from .tools.list_dir import make_list_dir_tool
+from .tools.move_file import make_move_file_tool
+from .tools.read_file import make_read_file_tool
 from .tools.registry import ToolRegistry
 from .tools.remember import make_remember_tool
-from .tools.search import search_tool
-from .tools.write_file import write_file_tool
+from .tools.run_command import make_run_command_tool
+from .tools.search import make_search_tool
+from .tools.write_file import make_write_file_tool
+from .workspace import Workspace
 
 # 세션 개념을 두지 않고 하나의 에이전트가 계속 이어가는 단일 세션 id.
 MAIN_SESSION = "main"
@@ -34,14 +40,28 @@ class AgentService:
             self._token_store, cfg.model, cfg.base_url, cfg.reasoning_effort
         )
         self._alignment = AlignmentStore(cfg.alignment_path)
+        self._workspace = Workspace.load(
+            cfg.workspace_file, env_override=os.environ.get("AGENT_WORKSPACE") or None
+        )
+        # 위험 명령 승인 함수. 기본은 거부(비대화형 안전), TUI가 대화형으로 교체한다.
+        self._approver: Callable[[str], bool] = lambda cmd: False
 
+        ws = self._workspace
         self._registry = ToolRegistry()
-        self._registry.register(read_file_tool)
-        self._registry.register(list_dir_tool)
-        self._registry.register(search_tool)
-        self._registry.register(write_file_tool)
+        self._registry.register(make_read_file_tool(ws))
+        self._registry.register(make_list_dir_tool(ws))
+        self._registry.register(make_search_tool(ws))
+        self._registry.register(make_write_file_tool(ws))
+        self._registry.register(make_edit_file_tool(ws))
+        self._registry.register(make_delete_file_tool(ws))
+        self._registry.register(make_move_file_tool(ws))
+        self._registry.register(make_run_command_tool(ws, lambda cmd: self._approver(cmd)))
         self._registry.register(make_remember_tool(self._alignment))
-        exposed = ["read_file", "list_dir", "search", "write_file", "remember_preference"]
+        exposed = [
+            "read_file", "list_dir", "search",
+            "write_file", "edit_file", "delete_file", "move_file", "run_command",
+            "remember_preference",
+        ]
 
         self._loop = AgentLoop(self._adapter, self._registry, exposed_tools=exposed)
         self._sessions = SessionStore(cfg.db_path)
@@ -54,6 +74,19 @@ class AgentService:
     @property
     def alignment(self) -> AlignmentStore:
         return self._alignment
+
+    # --- workspace(가드레일) ---
+
+    def workspace_root(self) -> str:
+        return str(self._workspace.root)
+
+    def set_workspace(self, path: str) -> str:
+        """작업 폴더를 바꾸고 저장한다(여러 프로젝트 전환). 새 루트 경로 반환."""
+        return str(self._workspace.set_root(path))
+
+    def set_approver(self, fn: Callable[[str], bool]) -> None:
+        """위험 명령 실행 승인 함수를 주입한다(표면별)."""
+        self._approver = fn
 
     def needs_onboarding(self) -> bool:
         """정렬 파일이 비어 있으면(첫 실행) 초기 설정이 필요하다."""

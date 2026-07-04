@@ -13,6 +13,10 @@ _DOING = {
     "read_file": "파일을 읽어볼게요",
     "search": "관련 내용을 찾아볼게요",
     "write_file": "파일을 저장할게요",
+    "edit_file": "파일을 수정할게요",
+    "delete_file": "파일을 삭제할게요",
+    "move_file": "파일을 옮길게요",
+    "run_command": "명령을 실행할게요",
     "remember_preference": "선호를 기억해둘게요",
 }
 _DONE = {
@@ -20,22 +24,34 @@ _DONE = {
     "read_file": "내용을 파악했어요",
     "search": "검색을 마쳤어요",
     "write_file": "저장했어요",
+    "edit_file": "수정했어요",
+    "delete_file": "삭제했어요",
+    "move_file": "옮겼어요",
+    "run_command": "실행했어요",
     "remember_preference": "기억했어요",
 }
 
 
 def _target(name: str, inp: dict) -> str:
-    """진행 문구에 곁들일 짧은 대상 표시(전체 경로/JSON 대신 파일명·검색어만)."""
+    """진행 문구에 곁들일 짧은 대상 표시(전체 경로/JSON 대신 파일명·명령만)."""
     if not isinstance(inp, dict):
         return ""
-    if name in ("read_file", "write_file", "list_dir"):
+    if name in ("read_file", "write_file", "list_dir", "edit_file", "delete_file"):
         p = inp.get("path")
         if p:
             return Path(str(p)).name or str(p)
+    if name == "move_file":
+        s = inp.get("src")
+        if s:
+            return Path(str(s)).name or str(s)
     if name == "search":
         q = inp.get("query")
         if q:
             return f"'{q}'"
+    if name == "run_command":
+        c = inp.get("command")
+        if c:
+            return str(c)[:40]
     return ""
 
 

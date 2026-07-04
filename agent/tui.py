@@ -12,32 +12,46 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
 from rich.console import Console
 from rich.panel import Panel
+from rich.prompt import Confirm
 
 from .service import AgentService
 from .ui_labels import doing, done
 
 HELP = """[bold]명령[/bold]
-  /init       초기 설정(말투·길이·역할) 다시 하기
-  /new        새 세션 시작
-  /sessions   세션 목록
-  /clear      화면 지우기
-  /help       이 도움말
-  /exit /quit 종료 (Ctrl-D 도 가능)"""
+  /init         초기 설정(말투·길이·역할) 다시 하기
+  /workspace [경로]  작업 폴더 보기/변경(수정·실행 허용 범위)
+  /new          새 세션 시작
+  /sessions     세션 목록
+  /clear        화면 지우기
+  /help         이 도움말
+  /exit /quit   종료 (Ctrl-D 도 가능)"""
 
 
-def _print_header(console: Console, cfg, sid: str, resumed: int | None) -> None:
+def _print_header(console: Console, service: AgentService, sid: str, resumed: int | None) -> None:
+    cfg = service.cfg
     sub = f"이어가기 · 이전 {resumed}개" if resumed is not None else "새 세션"
     console.print(
         Panel(
             f"[bold]Dasan[/bold]  ·  모델 [cyan]{cfg.model}[/cyan]  ·  세션 [dim]{sid}[/dim]  ·  {sub}\n"
-            "[dim]/help 로 명령 · list_dir·search·read_file·write_file 도구로 프로젝트를 직접 다룹니다[/dim]",
+            f"[dim]작업 폴더(수정·실행 허용): {service.workspace_root()}[/dim]\n"
+            "[dim]/help 로 명령 · 파일 탐색·수정·명령 실행을 직접 합니다[/dim]",
             border_style="cyan",
         )
     )
 
 
+def _make_approver(console: Console):
+    """위험 명령 실행 전 사용자 승인을 받는 함수."""
+    def approve(cmd: str) -> bool:
+        console.print(f"\n[yellow]⚠ 위험할 수 있는 명령이에요:[/yellow] [bold]{cmd}[/bold]")
+        return Confirm.ask("실행할까요?", default=False)
+
+    return approve
+
+
 def run_tui(service: AgentService, session_id: str | None = None) -> None:
     console = Console()
+    service.set_approver(_make_approver(console))  # 위험 명령은 대화형 승인
 
     if session_id:
         sid = session_id
@@ -45,7 +59,7 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
     else:
         sid = service.new_session()
         resumed = None
-    _print_header(console, service.cfg, sid, resumed)
+    _print_header(console, service, sid, resumed)
 
     prompt = PromptSession(history=InMemoryHistory())
 
@@ -74,6 +88,17 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
                 from .onboarding import run_onboarding
 
                 run_onboarding(service, console)
+                continue
+            if cmd == "workspace":
+                parts = text.split(maxsplit=1)
+                if len(parts) > 1:
+                    try:
+                        root = service.set_workspace(parts[1].strip())
+                        console.print(f"[green]작업 폴더 변경:[/green] [dim]{root}[/dim]")
+                    except Exception as e:
+                        console.print(f"[red]변경 실패:[/red] {e}")
+                else:
+                    console.print(f"현재 작업 폴더: [dim]{service.workspace_root()}[/dim]")
                 continue
             if cmd == "new":
                 sid = service.new_session()
