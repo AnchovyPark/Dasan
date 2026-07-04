@@ -51,6 +51,14 @@ class AgentService:
     def logged_in(self) -> bool:
         return self._token_store.logged_in()
 
+    @property
+    def alignment(self) -> AlignmentStore:
+        return self._alignment
+
+    def needs_onboarding(self) -> bool:
+        """정렬 파일이 비어 있으면(첫 실행) 초기 설정이 필요하다."""
+        return not self._alignment.load().strip()
+
     def new_session(self) -> str:
         return self._sessions.create_session()
 

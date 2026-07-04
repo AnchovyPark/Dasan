@@ -17,6 +17,7 @@ from .service import AgentService
 from .ui_labels import doing, done
 
 HELP = """[bold]명령[/bold]
+  /init       초기 설정(말투·길이·역할) 다시 하기
   /new        새 세션 시작
   /sessions   세션 목록
   /clear      화면 지우기
@@ -68,6 +69,11 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
                 continue
             if cmd == "clear":
                 console.clear()
+                continue
+            if cmd == "init":
+                from .onboarding import run_onboarding
+
+                run_onboarding(service.alignment, console)
                 continue
             if cmd == "new":
                 sid = service.new_session()

@@ -12,11 +12,20 @@ class AlignmentStore:
     def __init__(self, path: str) -> None:
         self._path = Path(path).expanduser()
 
+    @property
+    def path(self) -> Path:
+        return self._path
+
     def load(self) -> str:
         """현재까지 누적된 정렬 텍스트. 없으면 빈 문자열."""
         if not self._path.exists():
             return ""
         return self._path.read_text(encoding="utf-8").strip()
+
+    def write(self, text: str) -> None:
+        """정렬 파일을 통째로 덮어쓴다(초기 설정 onboarding에서 사용)."""
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
     def add(self, note: str) -> None:
         """지속적 선호 한 줄을 불릿으로 추가한다(완전 중복은 무시)."""

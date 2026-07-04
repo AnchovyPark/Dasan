@@ -58,6 +58,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_start.add_argument("--session", help="이어서 진행할 세션 id")
 
     sub.add_parser("login", help="OpenAI(ChatGPT) OAuth 로그인")
+    sub.add_parser("init", help="초기 설정(말투·길이·역할) 진행/변경")
     sub.add_parser("list", help="세션 목록 출력")
 
     p_ask = sub.add_parser("ask", help="단발 질문 (스크립트용)")
@@ -87,6 +88,13 @@ def main(argv: list[str] | None = None) -> None:
 
     service = AgentService(cfg)
 
+    if command == "init":
+        from .onboarding import run_onboarding
+
+        run_onboarding(service.alignment)
+        service.close()
+        return
+
     if command == "list":
         for sid, created in service.list_sessions():
             print(f"{sid}\t{created}")
@@ -104,6 +112,10 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     if command == "start":
+        if service.needs_onboarding():  # 첫 실행이면 대화 전에 초기 설정
+            from .onboarding import run_onboarding
+
+            run_onboarding(service.alignment)
         from .tui import run_tui
 
         run_tui(service, session or service.main_session())
