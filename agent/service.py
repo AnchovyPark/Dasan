@@ -7,18 +7,18 @@ from __future__ import annotations
 
 from typing import Callable
 
+from .alignment import AlignmentStore
 from .config import Config
 from .core.loop import AgentLoop
+from .prompt import compose_system
 from .providers.openai_oauth_adapter import OpenAIOAuthAdapter
 from .session.store import SessionStore
 from .tools.read_file import read_file_tool
 from .tools.registry import ToolRegistry
+from .tools.remember import make_remember_tool
 
-
-def build_registry() -> ToolRegistry:
-    reg = ToolRegistry()
-    reg.register(read_file_tool)
-    return reg
+# 세션 개념을 두지 않고 하나의 에이전트가 계속 이어가는 단일 세션 id.
+MAIN_SESSION = "main"
 
 
 class AgentService:
@@ -28,8 +28,14 @@ class AgentService:
 
         self._token_store = TokenStore(cfg.auth_path)
         self._adapter = OpenAIOAuthAdapter(self._token_store, cfg.model, cfg.base_url)
-        self._registry = build_registry()
-        self._loop = AgentLoop(self._adapter, self._registry, exposed_tools=["read_file"])
+        self._alignment = AlignmentStore(cfg.alignment_path)
+
+        self._registry = ToolRegistry()
+        self._registry.register(read_file_tool)
+        self._registry.register(make_remember_tool(self._alignment))
+        exposed = ["read_file", "remember_preference"]
+
+        self._loop = AgentLoop(self._adapter, self._registry, exposed_tools=exposed)
         self._sessions = SessionStore(cfg.db_path)
 
     # --- 인증/세션 관리 ---
@@ -39,6 +45,11 @@ class AgentService:
 
     def new_session(self) -> str:
         return self._sessions.create_session()
+
+    def main_session(self) -> str:
+        """항상 같은 단일 세션을 이어간다. 없으면 만들어 두고 그 id를 반환."""
+        self._sessions.ensure(MAIN_SESSION)
+        return MAIN_SESSION
 
     def session_exists(self, sid: str) -> bool:
         return self._sessions.exists(sid)
@@ -61,7 +72,10 @@ class AgentService:
         """세션 sid에 사용자 발화를 넣고 최종 답변을 반환. 대화는 저장된다."""
         messages = self._sessions.load_messages(sid)
         messages.extend(self._adapter.user_message(text))
-        answer = self._loop.run(messages, on_event=on_event, on_delta=on_delta)
+        system = compose_system(self._alignment.load())  # 매 요청마다 최신 ALIGNMENT 반영
+        answer = self._loop.run(
+            messages, system=system, on_event=on_event, on_delta=on_delta
+        )
         self._sessions.save_messages(sid, messages)
         return answer
 

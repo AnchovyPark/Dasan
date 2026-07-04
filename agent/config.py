@@ -23,6 +23,7 @@ class Config:
     base_url: str  # Responses API 백엔드 (Codex 버전마다 다를 수 있음)
     model: str
     db_path: str
+    alignment_path: str  # 사용자 지속 선호(ALIGNMENT) 저장 파일
 
 
 def load_config() -> Config:
@@ -30,5 +31,6 @@ def load_config() -> Config:
         auth_path=os.environ.get("AGENT_AUTH_PATH", "~/.dasan/auth.json"),
         base_url=os.environ.get("AGENT_BASE_URL", "https://chatgpt.com/backend-api/codex"),
         model=os.environ.get("AGENT_MODEL", "gpt-5.5"),
-        db_path=os.environ.get("AGENT_DB_PATH", "agent_sessions.db"),
+        db_path=os.environ.get("AGENT_DB_PATH", "~/.dasan/sessions.db"),
+        alignment_path=os.environ.get("AGENT_ALIGNMENT_PATH", "~/.dasan/alignment.md"),
     )

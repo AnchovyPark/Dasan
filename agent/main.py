@@ -91,13 +91,11 @@ def main(argv: list[str] | None = None) -> None:
     if command == "start":
         from .tui import run_tui
 
-        run_tui(service, session)
+        run_tui(service, session or service.main_session())
         return
 
     if command == "ask":
-        sid = session or service.new_session()
-        if not session:
-            print(f"새 세션: {sid}")
+        sid = session or service.main_session()
         try:
             answer = service.respond(
                 sid, " ".join(args.question), on_event=make_event_printer()

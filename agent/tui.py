@@ -38,7 +38,7 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
 
     if session_id:
         sid = session_id
-        resumed = service.message_count(sid)
+        resumed = service.message_count(sid) or None  # 0개면 새 세션처럼 표시
     else:
         sid = service.new_session()
         resumed = None

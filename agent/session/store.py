@@ -11,11 +11,16 @@ import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 class SessionStore:
     def __init__(self, db_path: str) -> None:
-        self._conn = sqlite3.connect(db_path)
+        # "~/.dasan/sessions.db" 같은 홈 경로를 실제 경로로 풀고 폴더를 보장한다.
+        # 그래야 실행 위치와 상관없이 항상 같은 DB를 참조/저장한다.
+        path = Path(db_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(path))
         self._conn.row_factory = sqlite3.Row
         self._init_db()
 
@@ -45,6 +50,16 @@ class SessionStore:
         )
         self._conn.commit()
         return sid
+
+    def ensure(self, sid: str) -> None:
+        """주어진 id의 세션을 (없으면) 만들어 둔다. 단일 고정 세션용."""
+        if self.exists(sid):
+            return
+        self._conn.execute(
+            "INSERT INTO sessions(id, created_at) VALUES (?, ?)",
+            (sid, datetime.now(timezone.utc).isoformat()),
+        )
+        self._conn.commit()
 
     def exists(self, sid: str) -> bool:
         cur = self._conn.execute("SELECT 1 FROM sessions WHERE id = ?", (sid,))

@@ -5,14 +5,28 @@ LLM으로 로컬 파일을 제어하는 개인 에이전트 하네스 (MVP).
 
 **인증**: OpenAI(ChatGPT 구독) OAuth — Codex CLI의 "Sign in with ChatGPT" 플로우를 재사용 (개인용).
 
-## 설치
+## 설치 (다른 컴퓨터 — 한 줄 전역 설치)
 
 ```bash
-./install.sh            # 패키지 설치 + dasan 명령 전역 연결
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/AnchovyPark/Dasan/main/install.sh | bash
+```
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/AnchovyPark/Dasan/main/install.ps1 | iex
+```
+
+GitHub에서 최신 코드를 받아 **pipx**로 전역 설치하고 `dasan` 명령을 PATH에 놓는다.
+설치 후 새 터미널에서 `dasan login` → `dasan start`. (pipx가 없으면 스크립트가 알아서 깔아준다.)
+
+## 개발 (이 리포에서 직접 수정)
+
+```bash
+pip install -e .        # editable 설치 — 소스 수정이 즉시 반영됨
 dasan login             # 브라우저 로그인 (최초 1회)
 ```
 
-`install.sh`는 `pip install -e .` 후 `dasan`이 PATH에 없으면 `/usr/local/bin` 등에 심링크를 걸어준다. 자동 연결이 안 되면 스크립트가 PATH 설정법을 안내한다. `python -m agent.main <인자>` 로도 동일하게 동작한다.
+`python -m agent.main <인자>` 로도 동일하게 동작한다.
 
 ## 사용
 
@@ -48,8 +62,9 @@ agent/
 | 변수 | 기본값 |
 |---|---|
 | `AGENT_MODEL` | `gpt-5.5` |
-| `AGENT_DB_PATH` | `agent_sessions.db` |
+| `AGENT_DB_PATH` | `~/.dasan/sessions.db` |
 | `AGENT_AUTH_PATH` | `~/.dasan/auth.json` |
+| `AGENT_ALIGNMENT_PATH` | `~/.dasan/alignment.md` |
 | `AGENT_BASE_URL` | `https://chatgpt.com/backend-api/codex` |
 
 ## 주의
