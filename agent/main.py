@@ -88,13 +88,6 @@ def main(argv: list[str] | None = None) -> None:
 
     service = AgentService(cfg)
 
-    if command == "init":
-        from .onboarding import run_onboarding
-
-        run_onboarding(service.alignment)
-        service.close()
-        return
-
     if command == "list":
         for sid, created in service.list_sessions():
             print(f"{sid}\t{created}")
@@ -106,6 +99,13 @@ def main(argv: list[str] | None = None) -> None:
         service.close()
         sys.exit(1)
 
+    if command == "init":  # 정제에 모델을 쓰므로 로그인 이후
+        from .onboarding import run_onboarding
+
+        run_onboarding(service)
+        service.close()
+        return
+
     if session and not service.session_exists(session):
         print(f"세션을 찾을 수 없습니다: {session}", file=sys.stderr)
         service.close()
@@ -115,7 +115,7 @@ def main(argv: list[str] | None = None) -> None:
         if service.needs_onboarding():  # 첫 실행이면 대화 전에 초기 설정
             from .onboarding import run_onboarding
 
-            run_onboarding(service.alignment)
+            run_onboarding(service)
         from .tui import run_tui
 
         run_tui(service, session or service.main_session())

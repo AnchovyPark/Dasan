@@ -73,7 +73,7 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
             if cmd == "init":
                 from .onboarding import run_onboarding
 
-                run_onboarding(service.alignment, console)
+                run_onboarding(service, console)
                 continue
             if cmd == "new":
                 sid = service.new_session()

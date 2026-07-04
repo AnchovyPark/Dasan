@@ -60,10 +60,11 @@ class OpenAIOAuthAdapter:
         body: dict = {
             "model": self._model,
             "input": messages,
-            "tools": self._to_openai_tools(tools),
             "stream": True,
             "store": False,
         }
+        if tools:  # 도구 없는 1회성 호출(정제 등)에서는 빈 배열을 보내지 않는다
+            body["tools"] = self._to_openai_tools(tools)
         if system:
             body["instructions"] = system
         if self._reasoning and self._reasoning not in ("off", "none"):

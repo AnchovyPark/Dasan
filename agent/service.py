@@ -95,5 +95,11 @@ class AgentService:
         self._sessions.save_messages(sid, messages)
         return answer
 
+    def complete(self, system: str, user: str) -> str:
+        """도구·세션 없이 1회성 응답을 받는다(초기 설정 정제 등에 사용)."""
+        messages = self._adapter.user_message(user)
+        resp = self._adapter.call(messages, [], system=system)
+        return resp.text or ""
+
     def close(self) -> None:
         self._sessions.close()
