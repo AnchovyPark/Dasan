@@ -7,15 +7,18 @@ from __future__ import annotations
 
 import os
 import sys
+from collections import defaultdict
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.history import InMemoryHistory
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
+from rich.rule import Rule
 
 from .service import AgentService
-from .ui_labels import doing, done
+from .ui_labels import doing
 
 HELP = """[bold]명령[/bold]
   /init         초기 설정(말투·길이·역할) 다시 하기
@@ -25,6 +28,21 @@ HELP = """[bold]명령[/bold]
   /clear        화면 지우기
   /help         이 도움말
   /exit /quit   종료 (Ctrl-D 도 가능)"""
+
+# 도구를 성격별로 묶어 요약 줄에 쓴다(개별 도구명 대신 '읽기 2 · 수정 3').
+_TOOL_CATEGORY = {
+    "read_file": "읽기", "list_dir": "읽기", "search": "읽기",
+    "write_file": "수정", "edit_file": "수정",
+    "delete_file": "수정", "move_file": "수정",
+    "run_command": "명령", "remember_preference": "기억",
+}
+_CATEGORY_ORDER = ["읽기", "수정", "명령", "기억", "기타"]
+
+
+def _tool_summary(counts: dict) -> str:
+    """도구 실행 집계를 '읽기 2 · 수정 3 · 명령 1' 한 줄로 접는다(0인 항목은 뺀다)."""
+    parts = [f"{c} {counts[c]}" for c in _CATEGORY_ORDER if counts.get(c)]
+    return " · ".join(parts)
 
 
 def _print_header(console: Console, service: AgentService, sid: str, resumed: int | None) -> None:
@@ -40,18 +58,29 @@ def _print_header(console: Console, service: AgentService, sid: str, resumed: in
     )
 
 
-def _make_approver(console: Console):
-    """위험 명령 실행 전 사용자 승인을 받는 함수."""
+def _make_approver(console: Console, ui: dict):
+    """위험 명령 실행 전 사용자 승인을 받는 함수.
+
+    승인은 루프 도중(스피너가 도는 중)에 일어나므로, 물어보는 동안엔
+    진행 스피너를 잠시 멈췄다가 다시 켠다.
+    """
     def approve(cmd: str) -> bool:
+        st = ui.get("status")
+        if st is not None:
+            st.stop()
         console.print(f"\n[yellow]⚠ 위험할 수 있는 명령이에요:[/yellow] [bold]{cmd}[/bold]")
-        return Confirm.ask("실행할까요?", default=False)
+        ok = Confirm.ask("실행할까요?", default=False)
+        if st is not None:
+            st.start()
+        return ok
 
     return approve
 
 
 def run_tui(service: AgentService, session_id: str | None = None) -> None:
     console = Console()
-    service.set_approver(_make_approver(console))  # 위험 명령은 대화형 승인
+    ui: dict = {"status": None}  # 진행 스피너 핸들 공유(승인 함수가 잠시 멈출 수 있게)
+    service.set_approver(_make_approver(console, ui))  # 위험 명령은 대화형 승인
 
     if session_id:
         sid = session_id
@@ -64,8 +93,9 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
     prompt = PromptSession(history=InMemoryHistory())
 
     while True:
+        console.print(Rule(style="grey37"))  # 턴 구분선
         try:
-            text = prompt.prompt("\nYou › ").strip()
+            text = prompt.prompt(ANSI("\033[1;36m You ›\033[0m ")).strip()
         except (EOFError, KeyboardInterrupt):
             console.print("\n[dim]종료합니다.[/dim]")
             break
@@ -112,27 +142,44 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
             console.print(f"[yellow]알 수 없는 명령: {text}[/yellow]  (/help)")
             continue
 
-        # 이벤트/스트리밍 콜백
+        # 이벤트/스트리밍 콜백.
+        # 작업 중엔 스피너로 '지금 하는 단계'만 보여주고, 답변이 시작되는 순간
+        # 그동안의 도구 실행을 '읽기 2 · 수정 3' 요약 한 줄로 접는다.
         debug = bool(os.environ.get("AGENT_DEBUG"))
-        state = {"started": False}
+        counts: dict = defaultdict(int)
+        state = {"answering": False}
+
+        def open_answer() -> None:
+            """도구 단계를 요약 한 줄로 접고 Dasan 답변 헤더를 연다(한 번만)."""
+            if state["answering"]:
+                return
+            st = ui.get("status")
+            if st is not None:
+                st.stop()
+                ui["status"] = None
+            if counts and not debug:
+                console.print(f"[dim]  {_tool_summary(counts)}[/dim]", highlight=False)
+            console.print("[bold green] Dasan ›[/bold green] ", end="")
+            state["answering"] = True
 
         def on_event(kind: str, **kw) -> None:
             if kind == "tool_call":
+                counts[_TOOL_CATEGORY.get(kw["name"], "기타")] += 1
                 if debug:
                     console.print(f"[dim]● {kw['name']}({kw['input']})[/dim]")
                 else:
-                    console.print(f"[dim]· {doing(kw['name'], kw['input'])}[/dim]")
+                    st = ui.get("status")
+                    if st is not None:
+                        st.update(f"[dim]{doing(kw['name'], kw['input'])}[/dim]")
             elif kind == "tool_result":
                 if debug:
                     tag = "[red]오류[/red] " if kw["is_error"] else ""
                     preview = kw["output"].replace("\n", " ")[:100]
                     console.print(f"[dim]  ↳ {tag}{preview}[/dim]")
                 elif kw["is_error"]:
-                    # 실패는 감추지 않고 실제 오류를 보여준다
+                    # 실패는 접지 않고 실제 오류를 그대로 보여준다
                     preview = kw["output"].replace("\n", " ")[:120]
                     console.print(f"[red]  ↳ 문제가 생겼어요: {preview}[/red]")
-                else:
-                    console.print(f"[dim]  ↳ {done(kw['name'], False)}[/dim]")
             elif kind == "refusal":
                 console.print("[yellow]모델이 응답을 거부했습니다[/yellow]")
             elif kind == "max_steps":
@@ -141,26 +188,34 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
                 console.print("[yellow]응답이 잘렸습니다(max_tokens)[/yellow]")
 
         def on_delta(token: str) -> None:
-            if not state["started"]:
-                console.print("\n[bold green]Dasan ›[/bold green] ", end="")
-                state["started"] = True
+            open_answer()
             sys.stdout.write(token)
             sys.stdout.flush()
 
-        # 제출 직후 즉시 신호를 줘서 '멍하니 기다리는' 공백을 없앤다
-        console.print("[dim]· 생각 중…[/dim]")
-
         try:
-            answer = service.respond(sid, text, on_event=on_event, on_delta=on_delta)
+            if debug:
+                answer = service.respond(sid, text, on_event=on_event, on_delta=on_delta)
+            else:
+                with console.status("[dim]생각 중…[/dim]", spinner="dots") as st:
+                    ui["status"] = st
+                    answer = service.respond(
+                        sid, text, on_event=on_event, on_delta=on_delta
+                    )
         except Exception as e:
+            ui["status"] = None
             console.print(f"\n[red][오류][/red] {e}")
             continue
+        finally:
+            ui["status"] = None
 
-        if state["started"]:
+        if state["answering"]:
             sys.stdout.write("\n")
             sys.stdout.flush()
         else:
             # 스트리밍이 없었던 경우(예: 도구만 돌고 텍스트 없음) 대비
-            console.print(f"\n[bold green]Dasan ›[/bold green] {answer}")
+            if counts and not debug:
+                console.print(f"[dim]  {_tool_summary(counts)}[/dim]", highlight=False)
+            console.print("[bold green] Dasan ›[/bold green] ", end="")
+            console.print(answer, highlight=False, markup=False)
 
     service.close()
