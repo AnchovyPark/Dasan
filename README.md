@@ -38,6 +38,7 @@ dasan login             # 브라우저 로그인 (최초 1회)
 dasan                          # 새 세션 시작: 초기 설정 + 제목 정하기 — 종료: /exit
 dasan start --<제목>           # 저장된 세션 이어가기 (예: dasan start --main)
 dasan ask "이 파일 요약해줘: ./notes.txt"   # 단발 질문 (스크립트용, 기본=최근 세션)
+dasan serve --port 8790        # Bongsu 같은 웹 클라이언트용 로컬 API 서버
 dasan list                     # 세션 목록 (제목·생성일·메시지 수)
 dasan update                   # 최신 버전으로 업데이트 (pipx/개발 설치 자동 감지)
 AGENT_DEBUG=1 dasan ask "..."  # 디버그 (원본 스트림 /tmp/dasan_raw.txt)

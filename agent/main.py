@@ -65,6 +65,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_update = sub.add_parser("update", help="Dasan을 최신 버전으로 업데이트")
     p_update.add_argument("--branch", help="설치할 브랜치 (기본: main)")
+
+    p_serve = sub.add_parser("serve", help="Bongsu 같은 웹 클라이언트용 로컬 API 서버 실행")
+    p_serve.add_argument("--host", default="127.0.0.1", help="바인드 주소 (기본: 127.0.0.1)")
+    p_serve.add_argument("--port", type=int, default=8790, help="포트 (기본: 8790)")
+    p_serve.add_argument("--reload", action="store_true", help="개발용 자동 재시작")
+
     sub.add_parser("init", help="초기 설정(말투·길이·역할) 진행/변경")
     sub.add_parser("list", help="세션 목록 출력")
 
@@ -131,6 +137,17 @@ def main(argv: list[str] | None = None) -> None:
 
     if command == "update":  # 설정·로그인 불필요
         _update(getattr(args, "branch", None))
+        return
+
+    if command == "serve":  # 설정은 API 앱에서 요청마다 로드
+        import uvicorn
+
+        uvicorn.run(
+            "agent.api:app",
+            host=getattr(args, "host", "127.0.0.1"),
+            port=getattr(args, "port", 8790),
+            reload=bool(getattr(args, "reload", False)),
+        )
         return
 
     cfg = load_config()

@@ -3,4 +3,6 @@ pydantic>=2
 python-dotenv>=1
 rich>=13
 prompt_toolkit>=3
+fastapi>=0.115
+uvicorn[standard]>=0.34
 # 대체 프로바이더용(선택): anthropic>=0.40
