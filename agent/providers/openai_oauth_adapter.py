@@ -42,6 +42,7 @@ class OpenAIOAuthAdapter:
         model: str,
         base_url: str,
         reasoning_effort: str = "high",
+        web_search: bool = False,
     ) -> None:
         self._store = store
         self._model = model
@@ -49,6 +50,7 @@ class OpenAIOAuthAdapter:
         self._session_id = str(uuid.uuid4())
         # gpt-5.x는 추론 강도를 조절할 수 있다. off/none/""이면 아예 안 보낸다.
         self._reasoning = (reasoning_effort or "").strip().lower()
+        self._web_search = web_search
 
     def call(
         self,
@@ -56,6 +58,7 @@ class OpenAIOAuthAdapter:
         tools: list[dict],
         system: str | None = None,
         on_delta=None,
+        on_event=None,
     ) -> ModelResponse:
         body: dict = {
             "model": self._model,
@@ -63,17 +66,20 @@ class OpenAIOAuthAdapter:
             "stream": True,
             "store": False,
         }
-        if tools:  # 도구 없는 1회성 호출(정제 등)에서는 빈 배열을 보내지 않는다
+        if tools:  # 도구 없는 1회성 호출(정제·요약 등)에서는 도구를 아예 붙이지 않는다
             body["tools"] = self._to_openai_tools(tools)
+            if self._web_search:
+                # 백엔드 네이티브 웹 검색 — 실행은 서버가 하고 결과만 응답에 섞여 온다
+                body["tools"].append({"type": "web_search"})
         if system:
             body["instructions"] = system
         if self._reasoning and self._reasoning not in ("off", "none"):
             body["reasoning"] = {"effort": self._reasoning}
-        return self._normalize(self._request(body, on_delta=on_delta))
+        return self._normalize(self._request(body, on_delta=on_delta, on_event=on_event))
 
     # --- HTTP (스트리밍 + 401 재시도) ---
 
-    def _request(self, body: dict, _retried: bool = False, on_delta=None) -> dict:
+    def _request(self, body: dict, _retried: bool = False, on_delta=None, on_event=None) -> dict:
         headers = {
             "Authorization": f"Bearer {self._store.access_token()}",
             "Content-Type": "application/json",
@@ -100,7 +106,7 @@ class OpenAIOAuthAdapter:
         with httpx.stream("POST", url, headers=headers, json=body, timeout=300) as r:
             if r.status_code == 401 and not _retried:
                 self._store.force_refresh()
-                return self._request(body, _retried=True, on_delta=on_delta)
+                return self._request(body, _retried=True, on_delta=on_delta, on_event=on_event)
             if r.status_code >= 400:
                 r.read()  # 스트리밍 응답의 본문을 읽어 에러 메시지에 담는다
                 raise RuntimeError(f"백엔드 {r.status_code}: {r.text}")
@@ -124,7 +130,14 @@ class OpenAIOAuthAdapter:
                 if etype == "response.output_text.delta" and on_delta:
                     on_delta(event.get("delta") or "")
                 if etype == "response.output_item.done" and event.get("item"):
-                    output_items.append(event["item"])
+                    item = event["item"]
+                    output_items.append(item)
+                    if item.get("type") == "web_search_call" and on_event:
+                        # action이 search면 query, open_page면 url이 들어 있다
+                        action = item.get("action") or {}
+                        label = action.get("query") or action.get("url") or ""
+                        if label:
+                            on_event("web_search", query=label)
                 elif etype in ("response.completed", "response.done") and "response" in event:
                     completed_output = event["response"].get("output")
 

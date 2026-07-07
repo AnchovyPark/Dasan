@@ -45,7 +45,7 @@ class AgentLoop:
 
         for _ in range(self._max_steps):
             resp = self._adapter.call(
-                messages, tools, system=system, on_delta=on_delta
+                messages, tools, system=system, on_delta=on_delta, on_event=emit
             )
             messages.extend(self._adapter.assistant_message(resp))
             if resp.text:

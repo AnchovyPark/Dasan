@@ -42,6 +42,8 @@ def make_event_printer():
                 print(f"  ↳ 문제가 생겼어요: {preview}")
             else:
                 print(f"  ↳ {done(kw['name'], False)}")
+        elif kind == "web_search":
+            print(f"  · 웹 검색: {kw['query'][:60]}")
         elif kind == "refusal":
             print("  [모델이 응답을 거부했습니다]")
         elif kind == "max_steps":

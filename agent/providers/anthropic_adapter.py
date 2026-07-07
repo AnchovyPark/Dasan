@@ -46,6 +46,7 @@ class AnthropicAdapter:
         tools: list[dict],
         system: str | None = None,
         on_delta=None,  # 이 어댑터는 스트리밍 미지원 — 무시
+        on_event=None,  # 네이티브 도구 이벤트 없음 — 무시
     ) -> ModelResponse:
         kwargs: dict = {
             "model": self._model,

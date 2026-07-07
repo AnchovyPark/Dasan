@@ -35,7 +35,8 @@ class AgentService:
 
         self._token_store = TokenStore(cfg.auth_path)
         self._adapter = OpenAIOAuthAdapter(
-            self._token_store, cfg.model, cfg.base_url, cfg.reasoning_effort
+            self._token_store, cfg.model, cfg.base_url, cfg.reasoning_effort,
+            web_search=cfg.web_search,
         )
         self._alignment = AlignmentStore(cfg.alignment_path)
         self._workspace = Workspace.load(

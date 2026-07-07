@@ -38,7 +38,7 @@ _TOOL_CATEGORY = {
     "delete_file": "수정", "move_file": "수정",
     "run_command": "명령", "remember_preference": "기억",
 }
-_CATEGORY_ORDER = ["읽기", "수정", "명령", "기억", "기타"]
+_CATEGORY_ORDER = ["읽기", "수정", "명령", "웹검색", "기억", "기타"]
 
 
 def _tool_summary(counts: dict) -> str:
@@ -227,6 +227,14 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
                     # 실패는 접지 않고 실제 오류를 그대로 보여준다
                     preview = kw["output"].replace("\n", " ")[:120]
                     console.print(f"[red]  ↳ 문제가 생겼어요: {preview}[/red]")
+            elif kind == "web_search":
+                counts["웹검색"] += 1
+                if debug:
+                    console.print(f"[dim]● web_search({kw['query']})[/dim]")
+                else:
+                    st = ui.get("status")
+                    if st is not None:
+                        st.update(f"[dim]웹 검색: {kw['query'][:60]}[/dim]")
             elif kind == "compact_start":
                 console.print(f"\n[dim]· 오래된 대화 {kw['folding']}턴을 장기 기억으로 접는 중…[/dim]")
             elif kind == "compact_done":
