@@ -5,6 +5,7 @@
   dasan start                 # 위와 동일
   dasan start --<제목>        # 저장된 세션 이어가기 (예: dasan start --main)
   dasan login                 # OpenAI(ChatGPT) OAuth 로그인
+  dasan update                # 최신 버전으로 업데이트 (pipx 설치/개발 설치 자동 감지)
   dasan list                  # 세션 목록
   dasan ask "질문..." [--session 제목]  # 단발 질문 (스크립트용, 기본=최근 세션)
 
@@ -59,6 +60,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_start.add_argument("--session", help="이어서 진행할 세션 제목")
 
     sub.add_parser("login", help="OpenAI(ChatGPT) OAuth 로그인")
+
+    p_update = sub.add_parser("update", help="Dasan을 최신 버전으로 업데이트")
+    p_update.add_argument("--branch", help="설치할 브랜치 (기본: main)")
     sub.add_parser("init", help="초기 설정(말투·길이·역할) 진행/변경")
     sub.add_parser("list", help="세션 목록 출력")
 
@@ -70,6 +74,44 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ask.add_argument("--session", help="이어서 진행할 세션 제목 (기본=최근 세션)")
 
     return parser
+
+
+def _update(branch: str | None) -> None:
+    """설치 방식을 감지해 최신 버전으로 갱신한다.
+
+    - 개발(editable) 설치(소스에 .git이 있음): 리포에서 git pull — 수정이 즉시 반영된다.
+    - pipx 전역 설치: GitHub에서 최신을 받아 강제 재설치한다.
+    """
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    if (repo_root / ".git").exists():
+        print(f"개발 설치 감지 — git pull ({repo_root})")
+        r = subprocess.run(["git", "-C", str(repo_root), "pull", "--ff-only"])
+        sys.exit(r.returncode)
+
+    branch = branch or os.environ.get("DASAN_BRANCH") or "main"
+    spec = f"git+https://github.com/AnchovyPark/Dasan.git@{branch}"
+    pipx = shutil.which("pipx")
+    cmd = (
+        [pipx, "install", "--force", spec]
+        if pipx
+        else [sys.executable, "-m", "pipx", "install", "--force", spec]
+    )
+    print(f"업데이트 중: {spec}")
+    r = subprocess.run(cmd)
+    if r.returncode == 0:
+        print("업데이트 완료. 새 터미널부터 적용됩니다.")
+    else:
+        print(
+            "업데이트 실패. 설치 스크립트를 다시 실행해보세요:\n"
+            "  (Windows)     irm https://raw.githubusercontent.com/AnchovyPark/Dasan/main/install.ps1 | iex\n"
+            "  (macOS/Linux) curl -fsSL https://raw.githubusercontent.com/AnchovyPark/Dasan/main/install.sh | bash",
+            file=sys.stderr,
+        )
+    sys.exit(r.returncode)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -84,6 +126,10 @@ def main(argv: list[str] | None = None) -> None:
         else:
             print(f"알 수 없는 인자: {tok}", file=sys.stderr)
             sys.exit(2)
+
+    if command == "update":  # 설정·로그인 불필요
+        _update(getattr(args, "branch", None))
+        return
 
     cfg = load_config()
 
