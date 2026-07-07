@@ -50,9 +50,15 @@ remember_preference 도구로 저장하라. 일회성 지시는 저장하지 말
 아래 ALIGNMENT 섹션은 그렇게 축적된 사용자 규칙이다 — 항상 반영하라."""
 
 
-def compose_system(alignment: str) -> str:
-    """CORE에 사용자 ALIGNMENT를 이어붙여 최종 시스템 프롬프트를 만든다."""
+def compose_system(alignment: str, digest: str | None = None) -> str:
+    """CORE + ALIGNMENT + (있으면) 이전 대화 digest를 합쳐 최종 시스템 프롬프트를 만든다."""
+    parts = [CORE_SYSTEM]
     alignment = (alignment or "").strip()
-    if not alignment:
-        return CORE_SYSTEM
-    return f"{CORE_SYSTEM}\n\n## ALIGNMENT (사용자가 축적한 규칙)\n{alignment}"
+    if alignment:
+        parts.append(f"## ALIGNMENT (사용자가 축적한 규칙)\n{alignment}")
+    digest = (digest or "").strip()
+    if digest:
+        parts.append(
+            "## 이전 대화 기억 (오래된 턴들의 요약 — 원문은 세션에 보존됨)\n" + digest
+        )
+    return "\n\n".join(parts)

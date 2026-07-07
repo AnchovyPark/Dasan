@@ -13,6 +13,7 @@ from .config import Config
 from .core.loop import AgentLoop
 from .prompt import compose_system
 from .providers.openai_oauth_adapter import OpenAIOAuthAdapter
+from .session import compact
 from .session.store import SessionStore
 from .tools.delete_file import make_delete_file_tool
 from .tools.edit_file import make_edit_file_tool
@@ -25,9 +26,6 @@ from .tools.run_command import make_run_command_tool
 from .tools.search import make_search_tool
 from .tools.write_file import make_write_file_tool
 from .workspace import Workspace
-
-# 세션 개념을 두지 않고 하나의 에이전트가 계속 이어가는 단일 세션 id.
-MAIN_SESSION = "main"
 
 
 class AgentService:
@@ -64,7 +62,7 @@ class AgentService:
         ]
 
         self._loop = AgentLoop(self._adapter, self._registry, exposed_tools=exposed)
-        self._sessions = SessionStore(cfg.db_path)
+        self._sessions = SessionStore(cfg.sessions_dir, legacy_db=cfg.legacy_db_path)
 
     # --- 인증/세션 관리 ---
 
@@ -92,22 +90,29 @@ class AgentService:
         """정렬 파일이 비어 있으면(첫 실행) 초기 설정이 필요하다."""
         return not self._alignment.load().strip()
 
-    def new_session(self) -> str:
-        return self._sessions.create_session()
+    def new_session(self, name: str) -> str:
+        """제목으로 세션을 만들고 실제(파일명으로 정리된) 이름을 반환."""
+        return self._sessions.create_session(name)
 
-    def main_session(self) -> str:
-        """항상 같은 단일 세션을 이어간다. 없으면 만들어 두고 그 id를 반환."""
-        self._sessions.ensure(MAIN_SESSION)
-        return MAIN_SESSION
+    def latest_session(self) -> str | None:
+        """가장 최근에 만든 세션 이름. 없으면 None."""
+        sessions = self._sessions.list_sessions()
+        return sessions[-1][0] if sessions else None
 
     def session_exists(self, sid: str) -> bool:
         return self._sessions.exists(sid)
 
-    def list_sessions(self) -> list[tuple[str, str]]:
+    def list_sessions(self) -> list[tuple[str, str, int]]:
+        """(이름, 생성일, 메시지 수) 목록."""
         return self._sessions.list_sessions()
 
     def message_count(self, sid: str) -> int:
         return len(self._sessions.load_messages(sid))
+
+    def clear_session(self, sid: str) -> None:
+        """세션의 대화 내용을 전부 비운다(세션 자체는 유지). digest·커서도 초기화."""
+        self._sessions.save_messages(sid, [])
+        self._sessions.set_compaction(sid, 0, "")
 
     # --- 대화 ---
 
@@ -118,15 +123,57 @@ class AgentService:
         on_event: Callable[..., None] | None = None,
         on_delta: Callable[[str], None] | None = None,
     ) -> str:
-        """세션 sid에 사용자 발화를 넣고 최종 답변을 반환. 대화는 저장된다."""
-        messages = self._sessions.load_messages(sid)
-        messages.extend(self._adapter.user_message(text))
-        system = compose_system(self._alignment.load())  # 매 요청마다 최신 ALIGNMENT 반영
+        """세션 sid에 사용자 발화를 넣고 최종 답변을 반환. 대화는 저장된다.
+
+        DB의 raw는 불변으로 두고, 모델에는 [digest(시스템에 합침)] + [최근 창
+        원문(오래된 도구 출력은 스텁 치환)]만 보낸다. 턴이 끝나면 필요 시
+        오래된 턴을 digest로 접는다(컴팩션).
+        """
+        all_items = self._sessions.load_messages(sid)
+        cursor, digest = self._sessions.get_compaction(sid)
+        send = compact.prepare_for_send(all_items[cursor:])  # 전송용 복사본
+        prepared = len(send)
+        send.extend(self._adapter.user_message(text))
+        # 매 요청마다 최신 ALIGNMENT·digest 반영
+        system = compose_system(self._alignment.load(), digest)
         answer = self._loop.run(
-            messages, system=system, on_event=on_event, on_delta=on_delta
+            send, system=system, on_event=on_event, on_delta=on_delta
         )
-        self._sessions.save_messages(sid, messages)
+        # 루프가 새로 만든 아이템(유저 메시지 포함)만 raw에 이어붙여 저장
+        all_items.extend(send[prepared:])
+        self._sessions.save_messages(sid, all_items)
+        self.compact_session(sid, on_event=on_event)  # 답변 후 뒷정리(필요 시)
         return answer
+
+    def compact_session(
+        self,
+        sid: str,
+        force: bool = False,
+        on_event: Callable[..., None] | None = None,
+    ) -> bool:
+        """원문 창의 오래된 턴들을 digest로 접는다. 접었으면 True.
+
+        force=False면 창의 유저 턴이 TRIGGER_TURNS를 넘을 때만 동작한다.
+        실패해도 예외를 밖으로 던지지 않는다(다음 턴에 재시도되므로).
+        """
+        emit = on_event or (lambda *a, **k: None)
+        all_items = self._sessions.load_messages(sid)
+        cursor, digest = self._sessions.get_compaction(sid)
+        tail = all_items[cursor:]
+        if not force and not compact.should_compact(tail):
+            return False
+        folded, _kept = compact.fold_split(tail)
+        if not folded:
+            return False
+        emit("compact_start", folding=compact.count_turns(folded))
+        try:
+            new_digest = compact.update_digest(self.complete, digest, folded)
+        except Exception as e:
+            emit("compact_failed", error=str(e))
+            return False
+        self._sessions.set_compaction(sid, cursor + len(folded), new_digest)
+        emit("compact_done", digest_len=len(new_digest))
+        return True
 
     def complete(self, system: str, user: str) -> str:
         """도구·세션 없이 1회성 응답을 받는다(초기 설정 정제 등에 사용)."""

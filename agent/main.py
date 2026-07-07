@@ -1,11 +1,12 @@
 """CLI 진입점.
 
 `pip install -e .` 후 `dasan` 명령으로 실행:
-  dasan                       # 채팅 TUI (start 기본)
-  dasan start [--session ID]  # 채팅 TUI
+  dasan                       # 새 세션 시작 (초기 설정 + 제목 정하기)
+  dasan start                 # 위와 동일
+  dasan start --<제목>        # 저장된 세션 이어가기 (예: dasan start --main)
   dasan login                 # OpenAI(ChatGPT) OAuth 로그인
   dasan list                  # 세션 목록
-  dasan ask "질문..." [--session ID]   # 단발 질문 (스크립트용)
+  dasan ask "질문..." [--session 제목]  # 단발 질문 (스크립트용, 기본=최근 세션)
 
 (설치 안 했으면 `python3 -m agent.main <같은 인자>` 로도 동일하게 동작)
 """
@@ -54,8 +55,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dasan", description="개인 에이전트 하네스")
     sub = parser.add_subparsers(dest="command")
 
-    p_start = sub.add_parser("start", help="채팅 TUI 시작")
-    p_start.add_argument("--session", help="이어서 진행할 세션 id")
+    p_start = sub.add_parser("start", help="새 세션 시작 (--<제목> 으로 이어가기)")
+    p_start.add_argument("--session", help="이어서 진행할 세션 제목")
 
     sub.add_parser("login", help="OpenAI(ChatGPT) OAuth 로그인")
     sub.add_parser("init", help="초기 설정(말투·길이·역할) 진행/변경")
@@ -66,15 +67,23 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_ask = sub.add_parser("ask", help="단발 질문 (스크립트용)")
     p_ask.add_argument("question", nargs="+", help="질문")
-    p_ask.add_argument("--session", help="이어서 진행할 세션 id")
+    p_ask.add_argument("--session", help="이어서 진행할 세션 제목 (기본=최근 세션)")
 
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
-    args = _build_parser().parse_args(argv)
+    args, extra = _build_parser().parse_known_args(argv)
     command = args.command or "start"  # 인자 없으면 채팅 TUI
     session = getattr(args, "session", None)
+
+    # `dasan start --<제목>` 지원: 정의되지 않은 --옵션을 세션 제목으로 해석
+    for tok in extra:
+        if command == "start" and tok.startswith("--") and len(tok) > 2:
+            session = tok[2:]
+        else:
+            print(f"알 수 없는 인자: {tok}", file=sys.stderr)
+            sys.exit(2)
 
     cfg = load_config()
 
@@ -92,8 +101,8 @@ def main(argv: list[str] | None = None) -> None:
     service = AgentService(cfg)
 
     if command == "list":
-        for sid, created in service.list_sessions():
-            print(f"{sid}\t{created}")
+        for sid, created, count in service.list_sessions():
+            print(f"{sid}\t{created[:16].replace('T', ' ')}\t메시지 {count}개")
         service.close()
         return
 
@@ -123,22 +132,26 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if session and not service.session_exists(session):
-        print(f"세션을 찾을 수 없습니다: {session}", file=sys.stderr)
+        print(f"세션을 찾을 수 없습니다: {session}  (`dasan list` 로 확인)", file=sys.stderr)
         service.close()
         sys.exit(1)
 
     if command == "start":
-        if service.needs_onboarding():  # 첫 실행이면 대화 전에 초기 설정
+        from .tui import run_tui
+
+        if not session:  # 새 세션: 매번 초기 설정(온보딩)부터
             from .onboarding import run_onboarding
 
             run_onboarding(service)
-        from .tui import run_tui
-
-        run_tui(service, session or service.main_session())
+        run_tui(service, session)
         return
 
     if command == "ask":
-        sid = session or service.main_session()
+        sid = session or service.latest_session()
+        if sid is None:
+            print("세션이 없습니다. 먼저 `dasan start` 로 만드세요.", file=sys.stderr)
+            service.close()
+            sys.exit(1)
         try:
             answer = service.respond(
                 sid, " ".join(args.question), on_event=make_event_printer()

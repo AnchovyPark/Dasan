@@ -2,7 +2,10 @@
 
 LLM으로 로컬 파일을 제어하는 개인 에이전트 하네스.
 "질문 → 도구(탐색·읽기·수정·명령 실행)로 프로젝트 작업 → 답변" ReAct 루프를 끝까지 돌리고,
-대화는 단일 세션으로 SQLite(`~/.dasan/sessions.db`)에 계속 이어진다. 시스템 프롬프트는 불변 역할(CORE)과 학습되는 사용자 정렬(ALIGNMENT) 2겹.
+대화는 세션 제목별 SQLite 파일(`~/.dasan/sessions/<제목>.db`)에 raw 그대로 저장되고,
+모델에는 [장기 기억 digest] + [최근 턴 원문]만 보내 컨텍스트가 무한히 자라지 않는다
+(오래된 턴은 주기적으로 LLM이 digest로 접고, 최근 창 안의 오래된 도구 출력은 규칙으로 스텁 치환).
+시스템 프롬프트는 불변 역할(CORE)과 학습되는 사용자 정렬(ALIGNMENT) 2겹.
 
 **인증**: OpenAI(ChatGPT 구독) OAuth — Codex CLI의 "Sign in with ChatGPT" 플로우를 재사용 (개인용).
 
@@ -32,14 +35,14 @@ dasan login             # 브라우저 로그인 (최초 1회)
 ## 사용
 
 ```bash
-dasan                          # 채팅 TUI (CC 스타일, 스트리밍) — 종료: /exit
-dasan start --session <id>     # 세션 이어가기
-dasan ask "이 파일 요약해줘: ./notes.txt"   # 단발 질문 (스크립트용)
-dasan list                     # 세션 목록
+dasan                          # 새 세션 시작: 초기 설정 + 제목 정하기 — 종료: /exit
+dasan start --<제목>           # 저장된 세션 이어가기 (예: dasan start --main)
+dasan ask "이 파일 요약해줘: ./notes.txt"   # 단발 질문 (스크립트용, 기본=최근 세션)
+dasan list                     # 세션 목록 (제목·생성일·메시지 수)
 AGENT_DEBUG=1 dasan ask "..."  # 디버그 (원본 스트림 /tmp/dasan_raw.txt)
 ```
 
-TUI 안 명령: `/init` `/workspace [경로]` `/new` `/sessions` `/clear` `/help` `/exit`
+TUI 안 명령: `/init` `/workspace [경로]` `/new` `/sessions` `/clear` `/compact` `/help` `/exit`
 
 ### 가드레일 (작업 폴더)
 
@@ -64,7 +67,7 @@ agent/
 ├─ alignment.py   # 사용자 지속 선호 저장(~/.dasan/alignment.md)
 ├─ workspace.py   # 변경·실행을 허용 폴더로 가두는 가드레일
 ├─ tools/         # read_file·list_dir·search / write_file·edit_file·delete_file·move_file·run_command / remember_preference
-├─ session/       # SQLite 세션 저장
+├─ session/       # SQLite 세션 저장 (세션당 파일 하나)
 ├─ service.py     # AgentService — 프론트엔드 무관 코어 (respond)
 ├─ tui.py         # CC 스타일 채팅 TUI (스트리밍)
 ├─ config.py      # 설정 (env로 override)
@@ -79,7 +82,10 @@ agent/
 |---|---|
 | `AGENT_MODEL` | `gpt-5.5` |
 | `AGENT_REASONING` | `high` (minimal/low/medium/high, 또는 `off`) |
-| `AGENT_DB_PATH` | `~/.dasan/sessions.db` |
+| `AGENT_SESSIONS_DIR` | `~/.dasan/sessions` (세션별 `<제목>.db`) |
+| `AGENT_CTX_KEEP_TURNS` | `8` (컴팩션 후 원문으로 남길 최근 턴) |
+| `AGENT_CTX_TRIGGER_TURNS` | `12` (이만큼 쌓이면 digest로 접기) |
+| `AGENT_CTX_STUB_TURNS` / `AGENT_CTX_STUB_MIN` | `3` / `500` (오래된 도구 출력 스텁 기준) |
 | `AGENT_AUTH_PATH` | `~/.dasan/auth.json` |
 | `AGENT_ALIGNMENT_PATH` | `~/.dasan/alignment.md` |
 | `AGENT_WORKSPACE` | (미설정 시 저장된 포인터 또는 cwd) |

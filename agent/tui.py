@@ -8,13 +8,14 @@ from __future__ import annotations
 import os
 import sys
 from collections import defaultdict
+from datetime import datetime
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.history import InMemoryHistory
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 from rich.rule import Rule
 
 from .service import AgentService
@@ -25,7 +26,8 @@ HELP = """[bold]명령[/bold]
   /workspace [경로]  작업 폴더 보기/변경(수정·실행 허용 범위)
   /new          새 세션 시작
   /sessions     세션 목록
-  /clear        화면 지우기
+  /clear        현재 세션 대화 내용 초기화 (화면도 지움)
+  /compact      오래된 턴을 지금 바로 장기 기억(digest)으로 접기
   /help         이 도움말
   /exit /quit   종료 (Ctrl-D 도 가능)"""
 
@@ -58,6 +60,28 @@ def _print_header(console: Console, service: AgentService, sid: str, resumed: in
     )
 
 
+def _create_titled_session(console: Console, service: AgentService) -> str:
+    """제목을 물어 새 세션을 만든다. 비우면 날짜 기반 이름을 붙인다."""
+    while True:
+        title = Prompt.ask("세션 제목 (Enter=자동)", default="").strip()
+        if not title:
+            base = datetime.now().strftime("%Y-%m-%d-%H%M")
+            title, n = base, 2
+            while service.session_exists(title):
+                title = f"{base}-{n}"
+                n += 1
+        elif service.session_exists(title):
+            console.print(
+                f"[yellow]이미 있는 세션이에요: {title}[/yellow]  "
+                f"(이어가려면 `dasan start --{title}`)"
+            )
+            continue
+        try:
+            return service.new_session(title)
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]")
+
+
 def _make_approver(console: Console, ui: dict):
     """위험 명령 실행 전 사용자 승인을 받는 함수.
 
@@ -86,7 +110,7 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
         sid = session_id
         resumed = service.message_count(sid) or None  # 0개면 새 세션처럼 표시
     else:
-        sid = service.new_session()
+        sid = _create_titled_session(console, service)
         resumed = None
     _print_header(console, service, sid, resumed)
 
@@ -112,7 +136,15 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
                 console.print(HELP)
                 continue
             if cmd == "clear":
+                count = service.message_count(sid)
+                if count and not Confirm.ask(
+                    f"이 세션의 대화 {count}개를 모두 지울까요?", default=False
+                ):
+                    continue
+                service.clear_session(sid)
                 console.clear()
+                _print_header(console, service, sid, None)
+                console.print("[green]대화 내용을 비웠어요. 새로 시작합니다.[/green]")
                 continue
             if cmd == "init":
                 from .onboarding import run_onboarding
@@ -130,14 +162,29 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
                 else:
                     console.print(f"현재 작업 폴더: [dim]{service.workspace_root()}[/dim]")
                 continue
+            if cmd == "compact":
+                console.print("[dim]· 기억 정리 중…[/dim]")
+                try:
+                    folded = service.compact_session(sid, force=True)
+                except Exception as e:
+                    console.print(f"[red]실패:[/red] {e}")
+                    continue
+                if folded:
+                    console.print("[green]오래된 턴을 장기 기억으로 접었어요.[/green]")
+                else:
+                    console.print("[dim]접을 만큼 오래된 턴이 없어요.[/dim]")
+                continue
             if cmd == "new":
-                sid = service.new_session()
+                sid = _create_titled_session(console, service)
                 console.print(f"[green]새 세션:[/green] [dim]{sid}[/dim]")
                 continue
             if cmd == "sessions":
-                for s, created in service.list_sessions():
+                for s, created, count in service.list_sessions():
                     mark = " [cyan]←현재[/cyan]" if s == sid else ""
-                    console.print(f"  [dim]{s}[/dim]  {created}{mark}")
+                    console.print(
+                        f"  [bold]{s}[/bold]  [dim]{created[:16].replace('T', ' ')}"
+                        f" · 메시지 {count}개[/dim]{mark}"
+                    )
                 continue
             console.print(f"[yellow]알 수 없는 명령: {text}[/yellow]  (/help)")
             continue
@@ -180,6 +227,12 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
                     # 실패는 접지 않고 실제 오류를 그대로 보여준다
                     preview = kw["output"].replace("\n", " ")[:120]
                     console.print(f"[red]  ↳ 문제가 생겼어요: {preview}[/red]")
+            elif kind == "compact_start":
+                console.print(f"\n[dim]· 오래된 대화 {kw['folding']}턴을 장기 기억으로 접는 중…[/dim]")
+            elif kind == "compact_done":
+                console.print("[dim]  ↳ 기억 정리 완료[/dim]")
+            elif kind == "compact_failed":
+                console.print(f"[dim]  ↳ 기억 정리 실패(다음 턴에 재시도): {kw['error'][:80]}[/dim]")
             elif kind == "refusal":
                 console.print("[yellow]모델이 응답을 거부했습니다[/yellow]")
             elif kind == "max_steps":

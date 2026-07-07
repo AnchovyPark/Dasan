@@ -60,14 +60,18 @@ def run_onboarding(service, console: Console | None = None) -> None:
         )
     )
     store = service.alignment
-    if store.load().strip():
-        console.print("[yellow]기존 설정을 덮어씁니다.[/yellow]\n")
+    has_existing = bool(store.load().strip())
+    if has_existing:
+        console.print("[dim]기존 설정이 있어요. 그대로 두려면 질문에 Enter만 치세요.[/dim]\n")
 
     while True:
         answers = _collect(console)
         if not answers:
-            console.print("[dim]입력이 없어 기본값(해요체·간결)으로 둘게요.[/dim]\n")
-            store.write(_DEFAULT)
+            if has_existing:
+                console.print("[dim]입력이 없어 기존 설정을 유지할게요.[/dim]\n")
+            else:
+                console.print("[dim]입력이 없어 기본값(해요체·간결)으로 둘게요.[/dim]\n")
+                store.write(_DEFAULT)
             return
 
         console.print("\n[dim]정리하는 중…[/dim]")

@@ -5,7 +5,18 @@
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """임시 파일에 전부 쓴 뒤 교체한다. 쓰는 도중 실패해도 기존 파일이 보존된다."""
+    # 파이프 입력 등에서 섞여 들어온 인코딩 불가 문자(서러게이트)는 버린다
+    text = text.encode("utf-8", errors="ignore").decode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 class AlignmentStore:
@@ -24,8 +35,7 @@ class AlignmentStore:
 
     def write(self, text: str) -> None:
         """정렬 파일을 통째로 덮어쓴다(초기 설정 onboarding에서 사용)."""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(text.rstrip() + "\n", encoding="utf-8")
+        _atomic_write(self._path, text.rstrip() + "\n")
 
     def add(self, note: str) -> None:
         """지속적 선호 한 줄을 불릿으로 추가한다(완전 중복은 무시)."""
@@ -37,5 +47,4 @@ class AlignmentStore:
         if bullet in lines:
             return
         lines.append(bullet)
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _atomic_write(self._path, "\n".join(lines) + "\n")
