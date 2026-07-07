@@ -28,6 +28,7 @@ class Config:
     reasoning_effort: str  # gpt-5.x 추론 강도: minimal/low/medium/high, 또는 off
     workspace_file: str  # 현재 작업 폴더(workspace) 포인터 파일
     web_search: bool  # 백엔드 네이티브 웹 검색 도구 사용 여부
+    max_steps: int  # 한 턴에서 허용하는 최대 ReAct 스텝(모델 호출) 수
 
 
 def load_config() -> Config:
@@ -42,4 +43,5 @@ def load_config() -> Config:
         workspace_file=os.environ.get("AGENT_WORKSPACE_FILE", "~/.dasan/workspace"),
         web_search=os.environ.get("AGENT_WEB_SEARCH", "1").lower()
         not in ("0", "false", "off"),
+        max_steps=int(os.environ.get("AGENT_MAX_STEPS", "50")),
     )

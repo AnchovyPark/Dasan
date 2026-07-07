@@ -276,7 +276,13 @@ def run_tui(service: AgentService, session_id: str | None = None) -> None:
             # 스트리밍이 없었던 경우(예: 도구만 돌고 텍스트 없음) 대비
             if counts and not debug:
                 console.print(f"[dim]  {_tool_summary(counts)}[/dim]", highlight=False)
-            console.print("[bold green] Dasan ›[/bold green] ", end="")
-            console.print(answer, highlight=False, markup=False)
+            if answer.strip():
+                console.print("[bold green] Dasan ›[/bold green] ", end="")
+                console.print(answer, highlight=False, markup=False)
+            else:
+                console.print(
+                    "[dim] (응답 텍스트 없이 끝났어요 — 작업이 도중에 끊겼다면 "
+                    "'계속해'라고 하면 이어서 합니다)[/dim]"
+                )
 
     service.close()

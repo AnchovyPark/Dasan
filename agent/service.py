@@ -62,7 +62,10 @@ class AgentService:
             "remember_preference",
         ]
 
-        self._loop = AgentLoop(self._adapter, self._registry, exposed_tools=exposed)
+        self._loop = AgentLoop(
+            self._adapter, self._registry, exposed_tools=exposed,
+            max_steps=cfg.max_steps,
+        )
         self._sessions = SessionStore(cfg.sessions_dir, legacy_db=cfg.legacy_db_path)
 
     # --- 인증/세션 관리 ---

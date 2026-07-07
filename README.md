@@ -84,6 +84,7 @@ agent/
 | `AGENT_MODEL` | `gpt-5.5` |
 | `AGENT_REASONING` | `high` (minimal/low/medium/high, 또는 `off`) |
 | `AGENT_WEB_SEARCH` | `1` (백엔드 네이티브 웹 검색, `0`이면 끔) |
+| `AGENT_MAX_STEPS` | `50` (한 턴 최대 ReAct 스텝 수) |
 | `AGENT_SESSIONS_DIR` | `~/.dasan/sessions` (세션별 `<제목>.db`) |
 | `AGENT_CTX_KEEP_TURNS` | `8` (컴팩션 후 원문으로 남길 최근 턴) |
 | `AGENT_CTX_TRIGGER_TURNS` | `12` (이만큼 쌓이면 digest로 접기) |
