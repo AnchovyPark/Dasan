@@ -29,7 +29,8 @@ def output(cid: str, size: int) -> dict:
 
 
 def turn(n: int, with_tool: bool = True, out_size: int = 1000) -> list[dict]:
-    items = [user(f"질문 {n}")]
+    items = [user(f"질문 {n}"),
+             {"type": "reasoning", "id": f"rs{n}", "encrypted_content": "blob"}]
     if with_tool:
         items += [call(f"c{n}"), output(f"c{n}", out_size)]
     items.append(assistant(f"답변 {n}"))
@@ -47,7 +48,9 @@ def test_prepare_for_send():
     compact.STUB_TURNS, compact.STUB_MIN_CHARS = 3, 500
     items = make_history(5, out_size=1000)
     sent = compact.prepare_for_send(items)
-    assert len(sent) == len(items)
+    # 오래된 턴(1·2)의 reasoning은 제외, 최근 3턴 것만 남는다
+    assert [it["id"] for it in sent if it["type"] == "reasoning"] == ["rs3", "rs4", "rs5"]
+    assert len(sent) == len(items) - 2
     outs = [it for it in sent if it["type"] == "function_call_output"]
     # 5턴 중 최근 3턴(3,4,5)은 원본, 오래된 1·2턴은 스텁
     assert outs[0]["output"].startswith("[오래된 도구 출력 생략")
@@ -55,7 +58,7 @@ def test_prepare_for_send():
     assert outs[2]["output"] == "x" * 1000
     assert outs[4]["output"] == "x" * 1000
     # 원본 리스트는 불변
-    assert items[2]["output"] == "x" * 1000
+    assert items[3]["output"] == "x" * 1000
     # 작은 출력은 오래돼도 그대로
     small = make_history(5, out_size=100)
     assert all(o["output"] == "x" * 100

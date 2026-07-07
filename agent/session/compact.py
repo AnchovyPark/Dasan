@@ -58,10 +58,13 @@ def prepare_for_send(items: list[dict]) -> list[dict]:
     for it in items:
         if _is_user_msg(it):
             turn += 1
+        old = turn <= total - STUB_TURNS
+        if old and it.get("type") == "reasoning":
+            continue  # 오래된 턴의 추론 흔적은 부피만 크고 의미 없음 — 전송에서 제외
         output = it.get("output") if it.get("type") == "function_call_output" else None
         if (
             output is not None
-            and turn <= total - STUB_TURNS
+            and old
             and len(output) >= STUB_MIN_CHARS
         ):
             stub = (

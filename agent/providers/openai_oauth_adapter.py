@@ -65,6 +65,9 @@ class OpenAIOAuthAdapter:
             "input": messages,
             "stream": True,
             "store": False,
+            # store:false에서도 reasoning을 되돌려 보낼 수 있게 암호화본을 받는다.
+            # 스텝 사이에 모델이 자기 계획을 유지해 '말만 하고 멈추는' 문제를 줄인다.
+            "include": ["reasoning.encrypted_content"],
         }
         if tools:  # 도구 없는 1회성 호출(정제·요약 등)에서는 도구를 아예 붙이지 않는다
             body["tools"] = self._to_openai_tools(tools)
@@ -187,8 +190,11 @@ class OpenAIOAuthAdapter:
                     ToolCall(id=item.get("call_id"), name=item.get("name"), input=args)
                 )
         stop_reason = "tool_use" if tool_calls else "end_turn"
-        # 되돌릴 때 reasoning 등은 제외해 400 위험을 줄인다(MVP 단순화).
-        raw = [it for it in output if it.get("type") in ("message", "function_call")]
+        # reasoning(암호화본)도 같이 되돌려 스텝 간 계획이 유지되게 한다(Codex CLI 방식).
+        raw = [
+            it for it in output
+            if it.get("type") in ("message", "function_call", "reasoning")
+        ]
         if os.environ.get("AGENT_DEBUG"):
             print("[DEBUG] output 아이템 타입:", [it.get("type") for it in output])
             print(f"[DEBUG] stop={stop_reason} text_len={len(''.join(text_parts))} tools={len(tool_calls)}")
