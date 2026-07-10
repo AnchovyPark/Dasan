@@ -6,3 +6,4 @@ prompt_toolkit>=3
 fastapi>=0.115
 uvicorn[standard]>=0.34
 # 대체 프로바이더용(선택): anthropic>=0.40
+# Discord 봇 표면용(선택, `dasan discord`): discord.py>=2.3

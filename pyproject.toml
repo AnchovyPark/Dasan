@@ -17,6 +17,9 @@ dependencies = [
     "uvicorn[standard]>=0.34",
 ]
 
+[project.optional-dependencies]
+bot = ["discord.py>=2.3"]
+
 [project.scripts]
 dasan = "agent.main:main"
 

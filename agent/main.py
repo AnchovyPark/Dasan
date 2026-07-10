@@ -5,9 +5,13 @@
   dasan start                 # 위와 동일
   dasan start --<제목>        # 저장된 세션 이어가기 (예: dasan start --main)
   dasan login                 # OpenAI(ChatGPT) OAuth 로그인
-  dasan update                # 최신 버전으로 업데이트 (pipx 설치/개발 설치 자동 감지)
+  dasan update [--branch main] # 최신 버전으로 업데이트 (pipx 설치/개발 설치 자동 감지)
+  dasan serve [--host 주소] [--port 포트] [--reload]  # Bongsu용 로컬 API 서버
+  dasan discord               # Discord 봇으로 실행 (밖에서 폰으로 호출)
+  dasan workspace [경로]      # 작업 폴더 보기/변경
   dasan list                  # 세션 목록
   dasan ask "질문..." [--session 제목]  # 단발 질문 (스크립트용, 기본=최근 세션)
+  dasan help [명령]           # 전체/명령별 도움말
 
 (설치 안 했으면 `python3 -m agent.main <같은 인자>` 로도 동일하게 동작)
 """
@@ -55,32 +59,128 @@ def make_event_printer():
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="dasan", description="개인 에이전트 하네스")
-    sub = parser.add_subparsers(dest="command")
+    fmt = argparse.RawTextHelpFormatter
+    parser = argparse.ArgumentParser(
+        prog="dasan",
+        description="개인 에이전트 하네스",
+        formatter_class=fmt,
+        add_help=False,
+        epilog="""자주 쓰는 예:
+  dasan                         새 세션 시작
+  dasan start --main            저장된 main 세션 이어가기
+  dasan start --session main    저장된 main 세션 이어가기
+  dasan ask "질문"              최근 세션에 단발 질문
+  dasan ask --session bongsu "질문"
+  dasan workspace               현재 작업 폴더 보기
+  dasan workspace ./bongsu      작업 폴더 변경
+  dasan serve --port 8790       Bongsu용 로컬 API 서버 실행
+  dasan update --branch main    지정 브랜치로 업데이트
 
-    p_start = sub.add_parser("start", help="새 세션 시작 (--<제목> 으로 이어가기)")
-    p_start.add_argument("--session", help="이어서 진행할 세션 제목")
+명령별 도움말:
+  dasan help <명령>
+  dasan <명령> --help""",
+    )
+    parser.add_argument("-h", "--help", action="help", help="도움말 출력")
+    sub = parser.add_subparsers(dest="command", metavar="<명령>")
+    command_parsers: dict[str, argparse.ArgumentParser] = {}
 
-    sub.add_parser("login", help="OpenAI(ChatGPT) OAuth 로그인")
+    def add_command(name: str, **kwargs) -> argparse.ArgumentParser:
+        kwargs.setdefault("formatter_class", fmt)
+        kwargs.setdefault("add_help", False)
+        p = sub.add_parser(name, **kwargs)
+        p.add_argument("-h", "--help", action="help", help="도움말 출력")
+        command_parsers[name] = p
+        return p
 
-    p_update = sub.add_parser("update", help="Dasan을 최신 버전으로 업데이트")
-    p_update.add_argument("--branch", help="설치할 브랜치 (기본: main)")
+    p_start = add_command(
+        "start",
+        help="새 세션 시작/저장된 세션 이어가기",
+        description="인자 없으면 새 세션을 만들고, 세션을 지정하면 기존 세션을 이어간다.",
+        epilog="""예:
+  dasan start
+  dasan start --main
+  dasan start --session main""",
+    )
+    p_start.add_argument("--session", metavar="제목", help="이어서 진행할 세션 제목")
 
-    p_serve = sub.add_parser("serve", help="Bongsu 같은 웹 클라이언트용 로컬 API 서버 실행")
-    p_serve.add_argument("--host", default="127.0.0.1", help="바인드 주소 (기본: 127.0.0.1)")
-    p_serve.add_argument("--port", type=int, default=8790, help="포트 (기본: 8790)")
+    add_command("login", help="OpenAI(ChatGPT) OAuth 로그인", description="브라우저로 로그인하고 토큰을 저장한다.")
+
+    p_update = add_command(
+        "update",
+        help="Dasan을 최신 버전으로 업데이트",
+        description="설치 방식을 감지해 개발 설치는 git pull, pipx 설치는 재설치로 갱신한다.",
+        epilog="""예:
+  dasan update
+  dasan update --branch main""",
+    )
+    p_update.add_argument("--branch", metavar="브랜치", help="설치할 브랜치 (기본: main)")
+
+    p_serve = add_command(
+        "serve",
+        help="Bongsu 같은 웹 클라이언트용 로컬 API 서버 실행",
+        description="FastAPI 로컬 서버를 띄운다. 기본 주소는 http://127.0.0.1:8790 이다.",
+        epilog="""예:
+  dasan serve
+  dasan serve --host 127.0.0.1 --port 8790
+  dasan serve --reload
+
+관련 env:
+  DASAN_API_TOKEN     설정하면 Authorization: Bearer <token> 필요
+  DASAN_API_SESSION   기본 세션 제목 (기본: bongsu)""",
+    )
+    p_serve.add_argument("--host", default="127.0.0.1", metavar="주소", help="바인드 주소 (기본: 127.0.0.1)")
+    p_serve.add_argument("--port", type=int, default=8790, metavar="포트", help="포트 (기본: 8790)")
     p_serve.add_argument("--reload", action="store_true", help="개발용 자동 재시작")
 
-    sub.add_parser("init", help="초기 설정(말투·길이·역할) 진행/변경")
-    sub.add_parser("list", help="세션 목록 출력")
+    add_command(
+        "discord",
+        help="Discord 봇으로 실행 (밖에서 폰으로 호출)",
+        description="Discord 봇 프로세스를 띄운다. 봇이 outbound로 붙어 들어오는 포트를 열지 않는다.",
+        epilog="""예:
+  dasan discord
 
-    p_ws = sub.add_parser("workspace", help="작업 폴더(수정·실행 허용 범위) 보기/변경")
-    p_ws.add_argument("path", nargs="?", help="설정할 폴더 (없으면 현재 표시)")
+필요한 env:
+  DISCORD_BOT_TOKEN           봇 토큰 (개발자 포털)
+  DISCORD_ALLOWED_USER_IDS    허용할 내 Discord 사용자 ID(쉼표 구분). 안전상 필수.
 
-    p_ask = sub.add_parser("ask", help="단발 질문 (스크립트용)")
-    p_ask.add_argument("question", nargs="+", help="질문")
-    p_ask.add_argument("--session", help="이어서 진행할 세션 제목 (기본=최근 세션)")
+세션은 Discord 채널 하나당 하나(discord-<channel_id>)로 관리된다.""",
+    )
 
+    add_command("init", help="초기 설정(말투·길이·역할) 진행/변경", description="말투·답변 길이·역할 같은 사용자 정렬을 다시 설정한다.")
+    add_command("list", help="세션 목록 출력", description="저장된 세션 제목, 생성일, 메시지 수를 출력한다.")
+
+    p_ws = add_command(
+        "workspace",
+        help="작업 폴더(수정·실행 허용 범위) 보기/변경",
+        description="파일 변경과 명령 실행이 허용되는 작업 폴더를 보거나 바꾼다.",
+        epilog="""예:
+  dasan workspace
+  dasan workspace ./bongsu""",
+    )
+    p_ws.add_argument("path", nargs="?", metavar="경로", help="설정할 폴더 (없으면 현재 표시)")
+
+    p_ask = add_command(
+        "ask",
+        help="단발 질문 (스크립트용)",
+        description="TUI 없이 한 번만 질문한다. 기본은 최근 세션을 사용한다.",
+        epilog="""예:
+  dasan ask "현재 프로젝트 상태 봐줘"
+  dasan ask --session bongsu "프론트 실행해줘""",
+    )
+    p_ask.add_argument("question", nargs="+", metavar="질문", help="질문")
+    p_ask.add_argument("--session", metavar="제목", help="이어서 진행할 세션 제목 (기본=최근 세션)")
+
+    p_help = add_command(
+        "help",
+        help="전체/명령별 도움말 출력",
+        description="전체 도움말이나 특정 명령 도움말을 출력한다.",
+        epilog="""예:
+  dasan help
+  dasan help serve""",
+    )
+    p_help.add_argument("topic", nargs="?", metavar="명령", help="도움말을 볼 명령")
+
+    setattr(parser, "_dasan_command_parsers", command_parsers)
     return parser
 
 
@@ -123,9 +223,26 @@ def _update(branch: str | None) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    args, extra = _build_parser().parse_known_args(argv)
+    parser = _build_parser()
+    args, extra = parser.parse_known_args(argv)
     command = args.command or "start"  # 인자 없으면 채팅 TUI
     session = getattr(args, "session", None)
+
+    if command == "help":
+        if extra:
+            print(f"알 수 없는 인자: {' '.join(extra)}", file=sys.stderr)
+            sys.exit(2)
+        topic = getattr(args, "topic", None)
+        command_parsers = getattr(parser, "_dasan_command_parsers", {})
+        if topic:
+            subparser = command_parsers.get(topic)
+            if subparser is None:
+                print(f"알 수 없는 명령: {topic}", file=sys.stderr)
+                sys.exit(2)
+            subparser.print_help()
+        else:
+            parser.print_help()
+        return
 
     # `dasan start --<제목>` 지원: 정의되지 않은 --옵션을 세션 제목으로 해석
     for tok in extra:
@@ -148,6 +265,12 @@ def main(argv: list[str] | None = None) -> None:
             port=getattr(args, "port", 8790),
             reload=bool(getattr(args, "reload", False)),
         )
+        return
+
+    if command == "discord":  # 설정은 봇이 메시지마다 로드
+        from .discord_bot import run_bot
+
+        run_bot()
         return
 
     cfg = load_config()
