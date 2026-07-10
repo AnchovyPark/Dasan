@@ -62,6 +62,11 @@ class AgentService:
             "remember_preference",
         ]
 
+        # 설치된 plugin들이 도구를 더 얹는다(entry point: dasan.plugins). wiki 등.
+        from .plugins import PluginContext, load_plugins
+
+        exposed += load_plugins(self._registry, PluginContext(config=cfg, workspace=ws))
+
         self._loop = AgentLoop(
             self._adapter, self._registry, exposed_tools=exposed,
             max_steps=cfg.max_steps,
