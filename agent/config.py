@@ -35,7 +35,7 @@ def load_config() -> Config:
     return Config(
         auth_path=os.environ.get("AGENT_AUTH_PATH", "~/.dasan/auth.json"),
         base_url=os.environ.get("AGENT_BASE_URL", "https://chatgpt.com/backend-api/codex"),
-        model=os.environ.get("AGENT_MODEL", "gpt-5.5"),
+        model=os.environ.get("AGENT_MODEL", "gpt-5.6-sol"),
         sessions_dir=os.environ.get("AGENT_SESSIONS_DIR", "~/.dasan/sessions"),
         legacy_db_path=os.environ.get("AGENT_DB_PATH", "~/.dasan/sessions.db"),
         alignment_path=os.environ.get("AGENT_ALIGNMENT_PATH", "~/.dasan/alignment.md"),
