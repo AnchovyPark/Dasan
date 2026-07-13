@@ -96,13 +96,10 @@ def run_bot() -> None:
         if message.author.id not in allowed:  # 허용된 사용자만
             return
 
-        is_dm = message.guild is None
-        # 서버 채널에선 봇을 멘션했을 때만 반응(잡음 방지). DM은 전부 반응.
-        if not is_dm and client.user not in message.mentions:
-            return
-
+        # 허용된 사용자의 메시지면 DM·서버 채널 어디서든 멘션 없이 반응한다.
+        # (허용 목록이 곧 잡음 방지 — 봇이 초대된 서버 = 내 서버)
         text = message.content
-        if not is_dm:  # 멘션 토큰 제거
+        if client.user in message.mentions:  # 멘션이 섞여 있으면 토큰만 제거
             text = text.replace(f"<@{client.user.id}>", "").replace(
                 f"<@!{client.user.id}>", ""
             ).strip()
