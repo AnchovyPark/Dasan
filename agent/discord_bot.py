@@ -60,6 +60,15 @@ def _respond_blocking(sid: str, text: str) -> str:
 
 
 def run_bot() -> None:
+    # ~/.dasan/discord.env 가 있으면 자동 로드(이미 설정된 환경변수가 우선).
+    # 덕분에 `dasan discord` 만으로 실행된다.
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(os.path.expanduser("~/.dasan/discord.env"))
+    except ImportError:
+        pass
+
     try:
         import discord
     except ImportError as e:
