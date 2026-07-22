@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import os
 
+from ..citations import sanitize_message_item, strip_citation_tokens
+
 # 창 안에서 이 수의 유저 턴보다 오래된 도구 출력은 스텁 치환
 STUB_TURNS = int(os.environ.get("AGENT_CTX_STUB_TURNS", "3"))
 # 이보다 작은 도구 출력은 치환해도 이득이 없어 그대로 둔다
@@ -56,6 +58,7 @@ def prepare_for_send(items: list[dict]) -> list[dict]:
     out: list[dict] = []
     turn = 0  # 현재 아이템이 속한 유저 턴 번호(1-base)
     for it in items:
+        it = sanitize_message_item(it)
         if _is_user_msg(it):
             turn += 1
         old = turn <= total - STUB_TURNS
@@ -100,9 +103,9 @@ def _render(items: list[dict]) -> str:
     for it in items:
         t = it.get("type")
         if t == "message":
-            text = "".join(
+            text = strip_citation_tokens("".join(
                 c.get("text", "") for c in it.get("content", []) if isinstance(c, dict)
-            ).strip()
+            )).strip()
             if text:
                 who = "사용자" if it.get("role") == "user" else "에이전트"
                 lines.append(f"{who}: {text}")

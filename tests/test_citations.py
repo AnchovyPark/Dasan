@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from agent.citations import format_web_citations, strip_citation_tokens
+from agent.citations import (
+    format_web_citations,
+    sanitize_message_item,
+    strip_citation_tokens,
+)
 from agent.discord_bot import _split
+from agent.session.compact import prepare_for_send
 
 
 TOKEN = "\ue200cite\ue202turn1search0\ue202turn1search1\ue201"
@@ -76,5 +81,29 @@ def test_strip_handles_pasted_input_forms():
         strip_citation_tokens("citeturn602486search0turn823810search1 남는 말")
         == " 남는 말"
     )
-    # 짝이 깨진 잔여 특수 문자
+    # 짝이 깨진 잔여 특수 문자와 닫는 괄호가 없는 citation
     assert strip_citation_tokens("짝깨짐") == "짝깨짐"
+    assert strip_citation_tokens("답 citeturn1search0turn2search1") == "답 "
+    assert strip_citation_tokens("답 cite turn1search0 turn2search1") == "답 "
+    assert strip_citation_tokens("답 turn1search0") == "답 "
+
+
+def test_sanitizes_raw_message_before_session_storage():
+    item = {
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": f"답변 {TOKEN}"}],
+    }
+    cleaned = sanitize_message_item(item)
+    assert cleaned["content"][0]["text"] == "답변 "
+    assert item["content"][0]["text"] == f"답변 {TOKEN}"
+
+
+def test_prepare_for_send_sanitizes_old_session_messages():
+    item = {
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": f"과거 답변 {TOKEN}"}],
+    }
+    sent = prepare_for_send([item])
+    assert sent[0]["content"][0]["text"] == "과거 답변 "

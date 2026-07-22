@@ -12,8 +12,13 @@ from urllib.parse import urlparse
 # 예: citeturn1search0turn1search1
 # cite 외에 navlist 등 다른 마커도 같은 PUA 괄호(...)를 쓴다.
 _PUA_BLOCK = re.compile(r"[^]*")
-# 복사 과정에서 PUA 문자만 떨어져 나간 맨몸 형태: citeturn1search0turn2search1
-_BARE_CITE = re.compile(r"cite(?:turn\d+[a-z]+\d+)+")
+# 복사 과정에서 PUA 문자만 떨어져 나간 맨몸 형태:
+# citeturn1search0turn2search1 / cite turn1search0 turn2search1
+_INTERNAL_CITE = re.compile(
+    r"\b(?:(?:cite|citation)\s*)?turn\d+[a-z]+\d+"
+    r"(?:\s*turn\d+[a-z]+\d+)*",
+    re.IGNORECASE,
+)
 # 짝이 깨진 채 남은 특수 문자 잔여물
 _PUA_STRAY = re.compile(r"[-]")
 
@@ -25,8 +30,29 @@ def strip_citation_tokens(text: str) -> str:
     특수 토큰이 입력에 섞이면 백엔드가 턴 중간에 실패할 수 있다.
     """
     cleaned = _PUA_BLOCK.sub("", text or "")
-    cleaned = _BARE_CITE.sub("", cleaned)
-    return _PUA_STRAY.sub("", cleaned)
+    # 닫는 괄호가 빠진 citation은 PUA 제거 뒤에야 citeturn... 형태가 된다.
+    cleaned = _PUA_STRAY.sub("", cleaned)
+    return _INTERNAL_CITE.sub("", cleaned)
+
+
+def sanitize_message_item(item: dict) -> dict:
+    """Responses message의 text 필드에서 내부 citation만 제거한 복사본을 만든다."""
+    if item.get("type") != "message":
+        return item
+
+    changed = False
+    content: list = []
+    for part in item.get("content", []):
+        if not isinstance(part, dict) or not isinstance(part.get("text"), str):
+            content.append(part)
+            continue
+        cleaned = strip_citation_tokens(part["text"])
+        if cleaned != part["text"]:
+            changed = True
+            content.append({**part, "text": cleaned})
+        else:
+            content.append(part)
+    return {**item, "content": content} if changed else item
 
 
 def _annotation_fields(annotation: dict) -> tuple[str, str] | None:

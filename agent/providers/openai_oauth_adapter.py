@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import httpx
 
 from ..auth.store import TokenStore
-from ..citations import format_web_citations
+from ..citations import format_web_citations, sanitize_message_item
 
 
 @dataclass
@@ -196,7 +196,8 @@ class OpenAIOAuthAdapter:
         text = format_web_citations("".join(text_parts), annotations)
         # reasoning(암호화본)도 같이 되돌려 스텝 간 계획이 유지되게 한다(Codex CLI 방식).
         raw = [
-            it for it in output
+            sanitize_message_item(it)
+            for it in output
             if it.get("type") in ("message", "function_call", "reasoning")
         ]
         if os.environ.get("AGENT_DEBUG"):
