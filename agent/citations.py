@@ -9,8 +9,24 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
-# 예: \ue200cite\ue202turn1search0\ue202turn1search1\ue201
-_CITATION_TOKEN = re.compile(r"\ue200cite\ue202.*?\ue201")
+# 예: citeturn1search0turn1search1
+# cite 외에 navlist 등 다른 마커도 같은 PUA 괄호(...)를 쓴다.
+_PUA_BLOCK = re.compile(r"[^]*")
+# 복사 과정에서 PUA 문자만 떨어져 나간 맨몸 형태: citeturn1search0turn2search1
+_BARE_CITE = re.compile(r"cite(?:turn\d+[a-z]+\d+)+")
+# 짝이 깨진 채 남은 특수 문자 잔여물
+_PUA_STRAY = re.compile(r"[-]")
+
+
+def strip_citation_tokens(text: str) -> str:
+    """ChatGPT 전용 citation/특수 토큰을 모두 제거한다.
+
+    모델 출력뿐 아니라 사용자가 이런 토큰을 복사·붙여넣기한 입력에도 쓴다 —
+    특수 토큰이 입력에 섞이면 백엔드가 턴 중간에 실패할 수 있다.
+    """
+    cleaned = _PUA_BLOCK.sub("", text or "")
+    cleaned = _BARE_CITE.sub("", cleaned)
+    return _PUA_STRAY.sub("", cleaned)
 
 
 def _annotation_fields(annotation: dict) -> tuple[str, str] | None:
@@ -39,7 +55,7 @@ def _escape_title(title: str) -> str:
 
 def format_web_citations(text: str, annotations: list[dict] | None = None) -> str:
     """불투명 citation 토큰을 제거하고 고유 URL을 Markdown 출처로 덧붙인다."""
-    cleaned = _CITATION_TOKEN.sub("", text or "")
+    cleaned = strip_citation_tokens(text)
     # 토큰 제거 뒤 생길 수 있는 문장 끝 공백만 정리한다.
     cleaned = re.sub(r"[ \t]+(?=\n|$)", "", cleaned).strip()
 

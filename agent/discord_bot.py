@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import traceback
 
-from .citations import format_web_citations
+from .citations import format_web_citations, strip_citation_tokens
 from .config import load_config
 from .service import AgentService
 
@@ -115,6 +116,9 @@ def run_bot() -> None:
             text = text.replace(f"<@{client.user.id}>", "").replace(
                 f"<@!{client.user.id}>", ""
             ).strip()
+        # 봇 답변을 복사·붙여넣기하면 ChatGPT 전용 citation 토큰이 입력에 섞여
+        # 백엔드가 턴 중간에 실패할 수 있다 — 모델에 넣기 전에 제거한다.
+        text = strip_citation_tokens(text).strip()
         if not text:
             return
 
@@ -124,9 +128,19 @@ def run_bot() -> None:
                 try:
                     reply = await asyncio.to_thread(_respond_blocking, sid, text)
                 except Exception as e:  # 봇이 죽지 않게 오류를 답장으로
+                    traceback.print_exc()
                     reply = f"[오류] {e}"
 
-        for chunk in _split(reply):
-            await message.channel.send(chunk)
+        # 전송 실패가 조용히 사라지면 사용자는 '응답이 안 온' 것만 본다 —
+        # 실패를 로그로 남기고 짧은 오류 답장이라도 반드시 시도한다.
+        try:
+            for chunk in _split(reply):
+                await message.channel.send(chunk)
+        except Exception:
+            traceback.print_exc()
+            try:
+                await message.channel.send("[오류] 답변 전송에 실패했어요. 호스트 터미널 로그를 확인해주세요.")
+            except Exception:
+                pass
 
     client.run(token)

@@ -143,11 +143,20 @@ class AgentService:
         send = compact.prepare_for_send(all_items[cursor:])  # 전송용 복사본
         prepared = len(send)
         send.extend(self._adapter.user_message(text))
+        user_end = len(send)
         # 매 요청마다 최신 ALIGNMENT·digest 반영
         system = compose_system(self._alignment.load(), digest)
-        answer = self._loop.run(
-            send, system=system, on_event=on_event, on_delta=on_delta
-        )
+        try:
+            answer = self._loop.run(
+                send, system=system, on_event=on_event, on_delta=on_delta
+            )
+        except Exception:
+            # 턴이 중간에 실패해도 사용자 발화는 남긴다 — 안 남기면 다음 턴에서
+            # 에이전트가 그 요청을 받은 적 없는 것처럼 엉뚱하게 이어간다.
+            # 루프가 만든 아이템은 버린다(답 없는 function_call이 남으면 다음 요청이 깨짐).
+            all_items.extend(send[prepared:user_end])
+            self._sessions.save_messages(sid, all_items)
+            raise
         # 루프가 새로 만든 아이템(유저 메시지 포함)만 raw에 이어붙여 저장
         all_items.extend(send[prepared:])
         self._sessions.save_messages(sid, all_items)
