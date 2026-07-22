@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 
+from .citations import format_web_citations
 from .config import load_config
 from .service import AgentService
 
@@ -29,7 +30,9 @@ def _allowed_user_ids() -> set[int]:
 
 def _split(text: str, limit: int = MAX_DISCORD) -> list[str]:
     """긴 답변을 Discord 한도(2000자) 이하 조각으로 자른다(줄 경계 우선)."""
-    text = text or "(빈 응답)"
+    # 어댑터에서 놓친 ChatGPT 전용 citation 토큰도 Discord 전송 직전에 제거한다.
+    # URL annotation이 정상 수집된 경우에는 이미 일반 Markdown 출처 링크로 바뀌어 있다.
+    text = format_web_citations(text) or "(빈 응답)"
     chunks: list[str] = []
     while len(text) > limit:
         cut = text.rfind("\n", 0, limit)

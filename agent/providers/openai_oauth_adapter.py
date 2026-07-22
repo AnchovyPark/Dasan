@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import httpx
 
 from ..auth.store import TokenStore
+from ..citations import format_web_citations
 
 
 @dataclass
@@ -174,6 +175,7 @@ class OpenAIOAuthAdapter:
     def _normalize(self, response_obj: dict) -> ModelResponse:
         output = response_obj.get("output", [])
         text_parts: list[str] = []
+        annotations: list[dict] = []
         tool_calls: list[ToolCall] = []
         for item in output:
             t = item.get("type")
@@ -181,6 +183,7 @@ class OpenAIOAuthAdapter:
                 for c in item.get("content", []):
                     if c.get("type") in ("output_text", "text"):
                         text_parts.append(c.get("text", ""))
+                        annotations.extend(c.get("annotations") or [])
             elif t == "function_call":
                 try:
                     args = json.loads(item.get("arguments") or "{}")
@@ -190,6 +193,7 @@ class OpenAIOAuthAdapter:
                     ToolCall(id=item.get("call_id"), name=item.get("name"), input=args)
                 )
         stop_reason = "tool_use" if tool_calls else "end_turn"
+        text = format_web_citations("".join(text_parts), annotations)
         # reasoning(암호화본)도 같이 되돌려 스텝 간 계획이 유지되게 한다(Codex CLI 방식).
         raw = [
             it for it in output
@@ -197,10 +201,10 @@ class OpenAIOAuthAdapter:
         ]
         if os.environ.get("AGENT_DEBUG"):
             print("[DEBUG] output 아이템 타입:", [it.get("type") for it in output])
-            print(f"[DEBUG] stop={stop_reason} text_len={len(''.join(text_parts))} tools={len(tool_calls)}")
+            print(f"[DEBUG] stop={stop_reason} text_len={len(text)} tools={len(tool_calls)}")
             if not text_parts and not tool_calls and output:
                 print("[DEBUG] 첫 아이템 원본:", json.dumps(output[0], ensure_ascii=False)[:1000])
-        return ModelResponse("".join(text_parts), tool_calls, raw, stop_reason)
+        return ModelResponse(text, tool_calls, raw, stop_reason)
 
     # --- 스키마/메시지 변환 ---
 
